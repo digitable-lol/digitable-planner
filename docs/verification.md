@@ -10,7 +10,7 @@ npm run test:a11y
 npm run test:falsifiers
 ```
 
-`npm run check` type-checks, runs the domain/data/storage/accessibility/cache
+`npm run check` type-checks, runs the domain/data/storage/city-map/accessibility/cache
 contracts, creates `dist/`, and checks the built artifact. `test:e2e` is an
 artifact-level offline-shell smoke test in this milestone; cross-browser
 Playwright and automated WCAG audits remain a later rollout gate.
@@ -27,6 +27,12 @@ Manual browser evidence recorded on 2026-09-01:
 - the event survived a full reload through IndexedDB;
 - the capability screen showed two `UNVERIFIED` provider labels and an install
   affordance.
+
+The persistence/map repair adds automated evidence for visible restore copies,
+strict city IDs, a payload-free cross-tab invalidation envelope, two live
+IndexedDB connections, recurrence-aware city grouping, valid offline
+coordinates/time zones, keyboard map markers, and absence of external map
+origins. Browser re-verification is recorded with the release commit.
 
 This is not evidence of CalDAV, iCloud, production deployment, true offline
 browser execution, or WCAG 2.2 AA conformance. Those claims remain open.

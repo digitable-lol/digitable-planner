@@ -34,6 +34,7 @@ export interface PlannerEvent {
   endDateExclusive: LocalDate
   allDay: true
   recurrence?: Recurrence
+  cityId?: string
   createdAt: string
   updatedAt: string
 }

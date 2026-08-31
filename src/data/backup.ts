@@ -1,5 +1,6 @@
 import { parseLocalDate } from '../domain/dates'
 import { assertSafeCalendarColors, isCalendarColor, type PlannerCalendar, type PlannerEvent, type PlannerState } from '../domain/types'
+import { getCity } from './cities'
 
 const MAGIC = 'DIGITABLE-PLANNER-BACKUP'
 const VERSION = 1
@@ -52,6 +53,7 @@ function validateEvent(value: unknown, calendarIds: Set<string>): value is Plann
   if (!['id', 'calendarId', 'title', 'description', 'startDate', 'endDateExclusive', 'createdAt', 'updatedAt']
     .every((key) => typeof event[key] === 'string')) return false
   if (event.allDay !== true || !calendarIds.has(event.calendarId as string)) return false
+  if (event.cityId !== undefined && (typeof event.cityId !== 'string' || !getCity(event.cityId))) return false
   try {
     parseLocalDate(event.startDate as string)
     parseLocalDate(event.endDateExclusive as string)
@@ -102,7 +104,7 @@ export function restoreAsCopy(current: PlannerState, preview: RestorePreview, no
   const calendars = preview.envelope.payload.calendars.map((calendar, index) => {
     const id = `restore-${suffix}-${index}`
     calendarMap.set(calendar.id, id)
-    return { ...calendar, id, name: `${calendar.name} · копия`, createdAt: now.toISOString() }
+    return { ...calendar, id, name: `${calendar.name} · копия`, visible: true, createdAt: now.toISOString() }
   })
   const events = preview.envelope.payload.events.map((event, index) => ({
     ...event,

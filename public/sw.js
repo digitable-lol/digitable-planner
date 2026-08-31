@@ -1,5 +1,5 @@
-const CACHE = 'digitable-planner-shell-v5'
-const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/digitable-logo-96.png', '/digitable-logo-192.png', '/digitable-logo-512.png', '/digitable-logo-maskable-512.png', '/assets/app.js', '/assets/app.css']
+const CACHE = 'digitable-planner-shell-v6'
+const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/digitable-logo-96.png', '/digitable-logo-192.png', '/digitable-logo-512.png', '/digitable-logo-maskable-512.png', '/assets/app-v2.js', '/assets/app-v2.css']
 
 function isShellAsset(pathname) {
   return SHELL.includes(pathname) || /^\/assets\/[^/]+\.(?:js|css|map)$/.test(pathname)

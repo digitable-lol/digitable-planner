@@ -62,4 +62,12 @@ describe('accessibility contract', () => {
     expect(css).toContain('.day { min-height: 49px; padding: 2px; }')
     expect(css).toContain('.day-number { width: 22px; height: 22px; font-size: 10px; }')
   })
+
+  it('keeps map markers keyboard-operable with a textual event fallback', () => {
+    expect(source).toContain("['map', 'Карта']")
+    expect(source).toContain("marker.type = 'button'")
+    expect(source).toContain("setAttribute('aria-label', `Карта событий")
+    expect(source).toContain("el('div', 'city-timeline')")
+    expect(css).toContain('.city-marker:focus-visible')
+  })
 })

@@ -36,20 +36,50 @@ function signedBackupWithColor(color: string): string {
   })
 }
 
+function signedBackupWithCity(cityId: string): string {
+  const payload = JSON.parse(JSON.stringify(state)) as Record<string, unknown>
+  const events = payload.events as Array<Record<string, unknown>>
+  events[0].cityId = cityId
+  return JSON.stringify({
+    magic: 'DIGITABLE-PLANNER-BACKUP',
+    version: 1,
+    createdAt: '2026-09-01T00:00:00.000Z',
+    checksum: fnv1a(JSON.stringify(payload)),
+    payload,
+  })
+}
+
 describe('iCalendar', () => {
   it('exports deterministically and round-trips supported fields', () => {
-    const first = exportIcs(state.events, 'Работа')
-    expect(exportIcs(state.events, 'Работа')).toBe(first)
+    const events = [{ ...state.events[0], cityId: 'moscow' }]
+    const first = exportIcs(events, 'Работа')
+    expect(exportIcs(events, 'Работа')).toBe(first)
     expect(first).toContain('DTSTART;VALUE=DATE:20260910')
     const imported = importIcs(first, 'target-cal', new Date('2026-09-01T00:00:00.000Z'))
     expect(imported).toHaveLength(1)
-    expect(imported[0]).toMatchObject({ title: 'Запуск, этап 1', description: 'Строка 1\nСтрока 2', startDate: '2026-09-10', endDateExclusive: '2026-09-13', calendarId: 'target-cal' })
+    expect(first).toContain('LOCATION:Москва\\, Россия')
+    expect(first).toContain('X-DIGITABLE-CITY-ID:moscow')
+    expect(imported[0]).toMatchObject({ title: 'Запуск, этап 1', description: 'Строка 1\nСтрока 2', startDate: '2026-09-10', endDateExclusive: '2026-09-13', calendarId: 'target-cal', cityId: 'moscow' })
     expect(imported[0].recurrence).toEqual({ frequency: 'yearly', interval: 1, until: '2028-09-10' })
   })
 
   it('rejects malformed events without returning partial results', () => {
     const input = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE:20260230\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
     expect(() => importIcs(input, 'cal-1')).toThrow()
+  })
+
+  it('leaves an unknown external city id unbound instead of geocoding it', () => {
+    const input = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:unknown\r\nDTSTART;VALUE=DATE:20260901\r\nSUMMARY:Trip\r\nLOCATION:Unknown place\r\nX-DIGITABLE-CITY-ID:not-in-catalogue\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    expect(importIcs(input, 'cal-1')[0].cityId).toBeUndefined()
+  })
+
+  it('folds Cyrillic content by RFC 5545 UTF-8 octets without splitting characters', () => {
+    const longTitle = 'Очень длинное название поездки '.repeat(8).trim()
+    const exported = exportIcs([{ ...state.events[0], title: longTitle, cityId: 'saint-petersburg' }])
+    for (const line of exported.split('\r\n').filter(Boolean)) {
+      expect(new TextEncoder().encode(line).byteLength).toBeLessThanOrEqual(75)
+    }
+    expect(importIcs(exported, 'cal-1')[0].title).toBe(longTitle.slice(0, 300))
   })
 })
 
@@ -66,6 +96,20 @@ describe('dplan backup', () => {
     expect(restored.events[1].calendarId).toBe(restored.calendars[1].id)
   })
 
+  it('restores copied calendars visible so their events appear immediately', () => {
+    const hiddenSource: PlannerState = {
+      ...state,
+      calendars: state.calendars.map((calendar) => ({ ...calendar, visible: false })),
+    }
+    const preview = previewBackup(createBackup(hiddenSource))
+    const restored = restoreAsCopy(state, preview, new Date('2026-09-02T00:00:00.000Z'))
+    const copiedCalendar = restored.calendars.at(-1)!
+    const copiedEvent = restored.events.at(-1)!
+
+    expect(copiedCalendar.visible).toBe(true)
+    expect(copiedEvent.calendarId).toBe(copiedCalendar.id)
+  })
+
   it('rejects tampering before state construction', () => {
     const parsed = JSON.parse(createBackup(state))
     parsed.payload.events[0].title = '<img src=x onerror=alert(1)>'
@@ -75,5 +119,10 @@ describe('dplan backup', () => {
   it('rejects a correctly checksummed CSS URL calendar colour before restore', () => {
     const malicious = signedBackupWithColor('url(http://127.0.0.1:4999/leak)')
     expect(() => previewBackup(malicious)).toThrow('Повреждены календари')
+  })
+
+  it('rejects a correctly checksummed event with an unknown city id', () => {
+    expect(() => previewBackup(signedBackupWithCity('attacker-controlled-city'))).toThrow('Повреждены события')
+    expect(previewBackup(signedBackupWithCity('moscow')).events).toBe(1)
   })
 })

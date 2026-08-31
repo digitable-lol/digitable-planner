@@ -1,9 +1,16 @@
 import { assertSafeCalendarColors, blankState, type PlannerCalendar, type PlannerEvent, type PlannerState } from '../domain/types'
+import { getCity } from '../data/cities'
 
 const DB_NAME = 'digitable-planner'
 const DB_VERSION = 1
 const CALENDARS = 'calendars'
 const EVENTS = 'events'
+
+function assertSafeEventCities(state: Pick<PlannerState, 'events'>): void {
+  if (!state.events.every((event) => event.cityId === undefined || Boolean(getCity(event.cityId)))) {
+    throw new Error('Обнаружен неизвестный город события')
+  }
+}
 
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -55,11 +62,13 @@ export class PlannerDatabase {
       events: events.sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id)),
     }
     assertSafeCalendarColors(state)
+    assertSafeEventCities(state)
     return state
   }
 
   async save(state: PlannerState): Promise<void> {
     assertSafeCalendarColors(state)
+    assertSafeEventCities(state)
     const transaction = this.database.transaction([CALENDARS, EVENTS], 'readwrite')
     const calendars = transaction.objectStore(CALENDARS)
     const events = transaction.objectStore(EVENTS)

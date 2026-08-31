@@ -1,13 +1,16 @@
 import { createBackup, previewBackup, restoreAsCopy, type RestorePreview } from './data/backup'
+import { getCity, plannerCities, projectCity } from './data/cities'
 import { exportIcs, importIcs } from './data/ical'
 import { addDays, isWeekend, localDate, parseLocalDate, todayLocal } from './domain/dates'
+import { cityEventGroups } from './domain/city-map'
 import { expandEvent } from './domain/recurrence'
 import { blankState, parseCalendarColor, PALETTE, type LocalDate, type PlannerCalendar, type PlannerEvent, type PlannerState } from './domain/types'
 import { installEmbedContract, requestFullView } from './embed'
 import { PlannerDatabase } from './storage/idb'
+import { PlannerStateSync } from './storage/state-sync'
 import { providerCapabilities } from './sync/provider'
 
-type ViewMode = 'year' | 'flow'
+type ViewMode = 'year' | 'flow' | 'map'
 type DisplayMode = 'banners' | 'heatmap'
 type AppSection = 'planner' | 'settings'
 
@@ -42,6 +45,7 @@ function readFile(file: File): Promise<string> {
 
 export class PlannerApp {
   private database?: PlannerDatabase
+  private stateSync?: PlannerStateSync
   private state: PlannerState = blankState()
   private year = new Date().getFullYear()
   private selectedDate: LocalDate = todayLocal()
@@ -51,6 +55,7 @@ export class PlannerApp {
   private persistenceError = ''
   private restorePreview?: RestorePreview
   private installPrompt?: Event & { prompt(): Promise<void> }
+  private selectedCityId?: string
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -58,6 +63,10 @@ export class PlannerApp {
     try {
       this.database = await PlannerDatabase.open()
       this.state = await this.database.load()
+      if ('BroadcastChannel' in window) {
+        this.stateSync = new PlannerStateSync(() => void this.reloadFromStorage())
+        window.addEventListener('pagehide', (event) => { if (!event.persisted) this.stateSync?.close() })
+      }
     } catch (error) {
       this.persistenceError = `Хранилище недоступно: ${error instanceof Error ? error.message : String(error)}. Изменения живут только до закрытия вкладки.`
     }
@@ -72,15 +81,30 @@ export class PlannerApp {
     this.render()
   }
 
-  private async commit(next: PlannerState): Promise<void> {
+  private async commit(next: PlannerState): Promise<boolean> {
     const previous = this.state
     this.state = next
     try {
       await this.database?.save(next)
       this.persistenceError = ''
+      this.stateSync?.notifyChanged()
+      this.render()
+      return true
     } catch (error) {
       this.state = previous
       this.persistenceError = `Не удалось сохранить: ${error instanceof Error ? error.message : String(error)}`
+      this.render()
+      return false
+    }
+  }
+
+  private async reloadFromStorage(): Promise<void> {
+    if (!this.database) return
+    try {
+      this.state = await this.database.load()
+      this.persistenceError = ''
+    } catch (error) {
+      this.persistenceError = `Не удалось обновить данные из другой вкладки: ${error instanceof Error ? error.message : String(error)}`
     }
     this.render()
   }
@@ -138,17 +162,19 @@ export class PlannerApp {
       this.textButton('Сегодня', () => { this.year = new Date().getFullYear(); this.selectedDate = todayLocal(); this.render() }),
     )
     const modes = el('div', 'mode-controls')
-    const viewSelect = this.selectControl('Раскладка', [['year', '12 месяцев'], ['flow', 'Лента']], this.viewMode, (value) => { this.viewMode = value as ViewMode; this.render() })
+    const viewSelect = this.selectControl('Раскладка', [['year', '12 месяцев'], ['flow', 'Лента'], ['map', 'Карта']], this.viewMode, (value) => { this.viewMode = value as ViewMode; this.render() })
     const displaySelect = this.selectControl('События', [['banners', 'Плашки'], ['heatmap', 'Нагрузка']], this.displayMode, (value) => { this.displayMode = value as DisplayMode; this.render() })
     const full = this.textButton('На весь экран', () => this.enterFullScreen())
     modes.append(viewSelect, displaySelect, full, this.textButton('+ Событие', () => this.openEventDialog(this.selectedDate)))
     toolbar.append(yearControl, modes)
 
-    const layout = el('div', 'planner-layout')
+    const layout = el('div', `planner-layout${this.viewMode === 'map' ? ' planner-layout--map' : ''}`)
     layout.append(this.renderSidebar())
-    const content = el('section', `months months--${this.viewMode}`)
-    content.setAttribute('aria-label', `Календарь на ${this.year} год`)
-    for (let month = 0; month < 12; month += 1) content.append(this.renderMonth(month))
+    const content = this.viewMode === 'map' ? this.renderMap() : el('section', `months months--${this.viewMode}`)
+    if (this.viewMode !== 'map') {
+      content.setAttribute('aria-label', `Календарь на ${this.year} год`)
+      for (let month = 0; month < 12; month += 1) content.append(this.renderMonth(month))
+    }
     layout.append(content, this.renderDayPanel())
     main.append(toolbar, layout)
     return main
@@ -173,6 +199,84 @@ export class PlannerApp {
     const note = el('p', 'microcopy', 'Хранится только в этом браузере. Экспортируйте резервную копию.')
     aside.append(note)
     return aside
+  }
+
+  private renderMap(): HTMLElement {
+    const pane = el('section', 'city-map-pane')
+    pane.setAttribute('aria-label', `Карта событий на ${this.year} год`)
+    const groups = cityEventGroups(this.state, this.year)
+    if (this.selectedCityId && !groups.some(({ city }) => city.id === this.selectedCityId)) this.selectedCityId = undefined
+    const active = groups.find(({ city }) => city.id === this.selectedCityId) ?? groups[0]
+
+    const heading = el('div', 'city-map-heading')
+    const title = el('div')
+    title.append(el('p', 'eyebrow', 'Где и когда'), el('h2', '', 'Карта года'))
+    heading.append(title, el('p', 'microcopy', 'Локальная схема без тайлов, геолокации и сетевых запросов. Линия показывает хронологию, а не маршрут.'))
+
+    const frame = el('div', 'city-map-frame')
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('viewBox', '0 0 1000 500')
+    svg.setAttribute('aria-hidden', 'true')
+    svg.classList.add('city-map-svg')
+    for (const latitude of [100, 200, 300, 400]) {
+      const line = document.createElementNS(svg.namespaceURI, 'line')
+      line.setAttribute('x1', '0'); line.setAttribute('x2', '1000'); line.setAttribute('y1', String(latitude)); line.setAttribute('y2', String(latitude))
+      line.classList.add('map-grid-line'); svg.append(line)
+    }
+    for (const longitude of [125, 250, 375, 500, 625, 750, 875]) {
+      const line = document.createElementNS(svg.namespaceURI, 'line')
+      line.setAttribute('x1', String(longitude)); line.setAttribute('x2', String(longitude)); line.setAttribute('y1', '0'); line.setAttribute('y2', '500')
+      line.classList.add('map-grid-line'); svg.append(line)
+    }
+    const land = document.createElementNS(svg.namespaceURI, 'path')
+    land.setAttribute('d', 'M45 90 110 55 210 75 275 135 240 205 170 218 125 175 70 165ZM220 225 280 250 300 325 265 435 225 360 205 285ZM410 85 520 55 650 75 760 125 835 115 925 170 875 225 760 215 690 250 600 225 545 175 480 165ZM505 205 590 225 625 315 575 405 505 365 475 280ZM790 335 865 320 915 365 875 420 800 405Z')
+    land.classList.add('map-land'); svg.append(land)
+    if (groups.length > 1) {
+      const route = document.createElementNS(svg.namespaceURI, 'polyline')
+      route.setAttribute('points', groups.map(({ city }) => { const point = projectCity(city); return `${point.x},${point.y}` }).join(' '))
+      route.classList.add('map-route'); svg.append(route)
+    }
+    frame.append(svg)
+
+    for (const group of groups) {
+      const point = projectCity(group.city)
+      const marker = el('button', `city-marker${active?.city.id === group.city.id ? ' is-active' : ''}`)
+      marker.type = 'button'
+      marker.style.setProperty('--map-x', `${point.x / 10}%`)
+      marker.style.setProperty('--map-y', `${point.y / 5}%`)
+      marker.setAttribute('aria-label', `${group.city.name}: ${group.occurrences.length} событий в ${this.year} году`)
+      marker.title = `${group.city.name} · ${group.occurrences.length}`
+      marker.append(el('span', 'city-marker__dot', String(group.occurrences.length)), el('span', 'city-marker__label', group.city.name))
+      marker.addEventListener('click', () => {
+        this.selectedCityId = group.city.id
+        this.selectedDate = group.occurrences[0].startDate
+        this.render()
+      })
+      frame.append(marker)
+    }
+
+    const timeline = el('div', 'city-timeline')
+    if (!active) {
+      timeline.append(el('h3', '', 'На карте пока пусто'), el('p', 'empty-state', 'Выберите город в событии — он появится здесь вместе с датой и календарём.'))
+    } else {
+      const activeHeading = el('div', 'city-timeline__heading')
+      activeHeading.append(el('h3', '', `${active.city.name}, ${active.city.country}`), el('span', 'status-badge status-badge--ready', `${active.occurrences.length} событий`))
+      timeline.append(activeHeading, el('p', 'microcopy', `Часовой пояс: ${active.city.timeZone}. События пока остаются целодневными.`))
+      for (const event of active.occurrences) {
+        const card = el('button', 'city-event-card')
+        card.type = 'button'
+        const calendar = this.state.calendars.find(({ id }) => id === event.calendarId)
+        card.style.setProperty('--event-color', calendar?.color ?? PALETTE[0])
+        card.append(el('time', '', event.startDate), el('strong', '', event.title), el('span', '', calendar?.name ?? 'Календарь'))
+        card.addEventListener('click', () => {
+          this.selectedDate = event.startDate
+          this.openEventDialog(event.startDate, event.id.split('::')[0])
+        })
+        timeline.append(card)
+      }
+    }
+    pane.append(heading, frame, timeline)
+    return pane
   }
 
   private renderMonth(month: number): HTMLElement {
@@ -252,8 +356,10 @@ export class PlannerApp {
       const card = el('button', 'agenda-card')
       card.type = 'button'
       const calendar = this.state.calendars.find(({ id }) => id === event.calendarId)
+      const city = getCity(event.cityId)
       card.style.setProperty('--event-color', calendar?.color ?? PALETTE[0])
       card.append(el('strong', '', event.title), el('span', '', calendar?.name ?? 'Календарь'))
+      if (city) card.append(el('span', '', `⌖ ${city.name}`))
       if (event.startDate !== addDays(event.endDateExclusive, -1)) card.append(el('span', '', `${event.startDate} — ${addDays(event.endDateExclusive, -1)}`))
       card.addEventListener('click', () => this.openEventDialog(this.selectedDate, event.id.split('::')[0]))
       aside.append(card)
@@ -292,10 +398,24 @@ export class PlannerApp {
     if (this.restorePreview) {
       const preview = el('div', 'restore-preview')
       preview.append(el('strong', '', 'Проверка пройдена'), el('p', '', `${this.restorePreview.calendars} календарей, ${this.restorePreview.events} событий. Исходные данные останутся без изменений.`))
-      preview.append(this.textButton('Восстановить как копию', () => void this.commit(restoreAsCopy(this.state, this.restorePreview!))))
+      preview.append(this.textButton('Восстановить как копию', () => this.restoreCopy()))
       card.append(preview)
     }
     return card
+  }
+
+  private async restoreCopy(): Promise<void> {
+    if (!this.restorePreview) return
+    const focusDate = this.restorePreview.earliest as LocalDate | undefined
+    const restored = restoreAsCopy(this.state, this.restorePreview)
+    if (!await this.commit(restored)) return
+    this.restorePreview = undefined
+    this.section = 'planner'
+    if (focusDate) {
+      this.selectedDate = focusDate
+      this.year = parseLocalDate(focusDate).getUTCFullYear()
+    }
+    this.render()
   }
 
   private renderIcsCard(): HTMLElement {
@@ -395,6 +515,19 @@ export class PlannerApp {
       calendarSelect.append(option)
     }
     calendarLabel.append(calendarSelect)
+    const cityLabel = el('label', 'field')
+    cityLabel.append(el('span', '', 'Город'))
+    const citySelect = el('select')
+    const noCity = el('option', '', 'Без города')
+    noCity.value = ''
+    citySelect.append(noCity)
+    for (const city of plannerCities) {
+      const option = el('option', '', `${city.name}, ${city.country}`)
+      option.value = city.id
+      option.selected = city.id === existing?.cityId
+      citySelect.append(option)
+    }
+    cityLabel.append(citySelect)
     const repeatLabel = el('label', 'field')
     repeatLabel.append(el('span', '', 'Повтор'))
     const repeat = el('select')
@@ -422,7 +555,7 @@ export class PlannerApp {
     const dateFields = el('div', 'field-row')
     dateFields.append(startInput.label, endInput.label)
     form.append(heading, titleInput.label, dateFields)
-    form.append(calendarLabel, repeatLabel, description, actions)
+    form.append(calendarLabel, cityLabel, repeatLabel, description, actions)
     form.addEventListener('submit', async (event) => {
       event.preventDefault()
       const startDate = startInput.input.value as LocalDate
@@ -438,6 +571,7 @@ export class PlannerApp {
         endDateExclusive,
         allDay: true,
         ...(repeat.value ? { recurrence: { frequency: repeat.value as 'weekly' | 'monthly' | 'yearly', interval: 1 } } : {}),
+        ...(citySelect.value ? { cityId: citySelect.value } : {}),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       }

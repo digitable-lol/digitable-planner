@@ -6,9 +6,12 @@ provider connection.
 
 ## Current milestone
 
-- classic 12-month desktop view and continuous flow view;
+- classic 12-month desktop view, continuous flow view, and an offline city map;
 - banners and heatmap, multiple local calendars, event CRUD and recurrence;
-- IndexedDB persistence, `.ics` import/export and checked `.dplan` backups;
+- city selection from a bundled list, chronological map markers, and no tile or
+  geolocation requests;
+- IndexedDB persistence with live same-origin tab refresh, `.ics` import/export
+  and checked `.dplan` backups;
 - installable PWA, full-view mode and a narrow Courses embed contract;
 - exact Digitable dark/light palette and canonical Digitable PWA icons.
 

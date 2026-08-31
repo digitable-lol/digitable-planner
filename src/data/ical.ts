@@ -1,5 +1,6 @@
 import { addDays, formatLocalDate, parseLocalDate } from '../domain/dates'
 import type { LocalDate, PlannerEvent } from '../domain/types'
+import { getCity } from './cities'
 
 const MAX_ICS_BYTES = 2_000_000
 const MAX_EVENTS = 5_000
@@ -25,13 +26,20 @@ function localFromIcal(value: string): LocalDate {
 
 function fold(line: string): string {
   const chunks: string[] = []
-  let remaining = line
-  while (remaining.length > 73) {
-    chunks.push(remaining.slice(0, 73))
-    remaining = ` ${remaining.slice(73)}`
+  const encoder = new TextEncoder()
+  let current = ''
+  let limit = 75
+  for (const character of line) {
+    if (current && encoder.encode(current + character).byteLength > limit) {
+      chunks.push(current)
+      current = character
+      limit = 74 // Continuation lines start with one folding-space octet.
+    } else {
+      current += character
+    }
   }
-  chunks.push(remaining)
-  return chunks.join('\r\n')
+  chunks.push(current)
+  return chunks.join('\r\n ')
 }
 
 export function exportIcs(events: PlannerEvent[], calendarName = 'Digitable Planner'): string {
@@ -48,6 +56,11 @@ export function exportIcs(events: PlannerEvent[], calendarName = 'Digitable Plan
     lines.push(`DTSTART;VALUE=DATE:${icalDate(event.startDate)}`, `DTEND;VALUE=DATE:${icalDate(event.endDateExclusive)}`)
     lines.push(`SUMMARY:${escapeText(event.title)}`)
     if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`)
+    const city = getCity(event.cityId)
+    if (city) {
+      lines.push(`LOCATION:${escapeText(`${city.name}, ${city.country}`)}`)
+      lines.push(`X-DIGITABLE-CITY-ID:${city.id}`)
+    }
     if (event.recurrence) {
       const rule = [`FREQ=${event.recurrence.frequency.toUpperCase()}`, `INTERVAL=${event.recurrence.interval}`]
       if (event.recurrence.until) rule.push(`UNTIL=${icalDate(event.recurrence.until)}`)
@@ -78,6 +91,7 @@ export function importIcs(input: string, calendarId: string, now = new Date()): 
       if (endDateExclusive <= startDate) throw new Error('DTEND должен быть позже DTSTART')
       const id = (current.UID?.split('@')[0] || crypto.randomUUID()).slice(0, 160)
       const recurrence = parseRecurrence(current.RRULE)
+      const city = getCity(current['X-DIGITABLE-CITY-ID'])
       events.push({
         id: events.some((event) => event.id === id) ? `${id}-${events.length}` : id,
         calendarId,
@@ -87,6 +101,7 @@ export function importIcs(input: string, calendarId: string, now = new Date()): 
         endDateExclusive,
         allDay: true,
         ...(recurrence ? { recurrence } : {}),
+        ...(city ? { cityId: city.id } : {}),
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       })
@@ -98,7 +113,7 @@ export function importIcs(input: string, calendarId: string, now = new Date()): 
       const separator = line.indexOf(':')
       if (separator < 1) continue
       const key = line.slice(0, separator).split(';')[0]
-      if (['UID', 'DTSTART', 'DTEND', 'SUMMARY', 'DESCRIPTION', 'RRULE'].includes(key)) current[key] = line.slice(separator + 1)
+      if (['UID', 'DTSTART', 'DTEND', 'SUMMARY', 'DESCRIPTION', 'LOCATION', 'RRULE', 'X-DIGITABLE-CITY-ID'].includes(key)) current[key] = line.slice(separator + 1)
     }
   }
   if (current) throw new Error('Незакрытый VEVENT')
