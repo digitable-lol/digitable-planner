@@ -80,4 +80,14 @@ describe('accessibility contract', () => {
     expect(source).toContain('this.commit(blankState())')
     expect(css).toContain('.settings-dialog')
   })
+
+  it('offers an accessible calendar edit action without nesting a button in the visibility label', () => {
+    expect(source).toContain("el('div', 'calendar-row')")
+    expect(source).toContain("el('label', 'calendar-toggle')")
+    expect(source).toContain('`Изменить календарь «${calendar.name}»`')
+    expect(source).toContain("existing ? 'Сохранить' : 'Создать'")
+    expect(source).toContain('updateCalendarDetails(this.state, existing.id')
+    expect(source).toContain('!PALETTE.some((color) => color === existing.color)')
+    expect(css).toContain('.calendar-edit')
+  })
 })

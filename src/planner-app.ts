@@ -4,7 +4,7 @@ import { exportIcs, importIcs } from './data/ical'
 import { addDays, isWeekend, localDate, parseLocalDate, todayLocal } from './domain/dates'
 import { cityEventGroups } from './domain/city-map'
 import { expandEvent } from './domain/recurrence'
-import { blankState, parseCalendarColor, PALETTE, type LocalDate, type PlannerCalendar, type PlannerEvent, type PlannerState } from './domain/types'
+import { blankState, parseCalendarColor, PALETTE, updateCalendarDetails, type LocalDate, type PlannerCalendar, type PlannerEvent, type PlannerState } from './domain/types'
 import { installEmbedContract, requestFullView } from './embed'
 import { PlannerDatabase } from './storage/idb'
 import { PlannerStateSync } from './storage/state-sync'
@@ -187,14 +187,20 @@ export class PlannerApp {
     title.append(el('h2', '', 'Календари'), this.iconButton('+', 'Добавить календарь', () => this.openCalendarDialog()))
     aside.append(title)
     for (const calendar of this.state.calendars) {
-      const row = el('label', 'calendar-row')
+      const row = el('div', 'calendar-row')
+      const toggle = el('label', 'calendar-toggle')
       const checkbox = el('input')
       checkbox.type = 'checkbox'
       checkbox.checked = calendar.visible
+      checkbox.setAttribute('aria-label', `Показывать календарь «${calendar.name}»`)
       checkbox.addEventListener('change', () => void this.commit({ ...this.state, calendars: this.state.calendars.map((item) => item.id === calendar.id ? { ...item, visible: checkbox.checked } : item) }))
       const dot = el('span', 'calendar-dot')
       dot.style.backgroundColor = calendar.color
-      row.append(checkbox, dot, el('span', '', calendar.name))
+      const name = el('span', 'calendar-name', calendar.name)
+      const edit = this.iconButton('⋯', `Изменить календарь «${calendar.name}»`, () => this.openCalendarDialog(calendar))
+      edit.classList.add('calendar-edit')
+      toggle.append(checkbox, dot, name)
+      row.append(toggle, edit)
       aside.append(row)
     }
     const note = el('p', 'microcopy', 'Хранится только в этом браузере. Экспортируйте резервную копию.')
@@ -623,32 +629,48 @@ export class PlannerApp {
     return dialog
   }
 
-  private openCalendarDialog(): void {
+  private openCalendarDialog(existing?: PlannerCalendar): void {
     const dialog = document.querySelector<HTMLDialogElement>('#calendar-dialog')
     if (!dialog) return
     const form = el('form', 'dialog-form')
     const heading = el('div', 'dialog-heading')
-    const title = el('h2', '', 'Новый календарь')
+    const title = el('h2', '', existing ? 'Изменить календарь' : 'Новый календарь')
     title.id = 'calendar-dialog-title'
     heading.append(title, this.iconButton('×', 'Закрыть', () => dialog.close()))
-    const name = this.field('Название', 'text', '')
+    const name = this.field('Название', 'text', existing?.name ?? '')
     name.input.required = true
     const colours = el('fieldset', 'color-field')
     colours.append(el('legend', '', 'Цвет'))
-    PALETTE.forEach((color, index) => {
+    const availableColours = existing && !PALETTE.some((color) => color === existing.color)
+      ? [existing.color, ...PALETTE]
+      : [...PALETTE]
+    availableColours.forEach((color, index) => {
       const label = el('label', 'color-choice')
       const input = el('input')
-      input.type = 'radio'; input.name = 'color'; input.value = color; input.checked = index === 0
+      input.type = 'radio'; input.name = 'color'; input.value = color; input.checked = existing ? existing.color === color : index === 0
       const swatch = el('span'); swatch.style.backgroundColor = color
       label.append(input, swatch); colours.append(label)
     })
     const actions = el('div', 'dialog-actions')
-    actions.append(this.textButton('Отмена', () => dialog.close(), 'secondary-button'), Object.assign(el('button', 'primary-button', 'Создать'), { type: 'submit' }))
+    actions.append(this.textButton('Отмена', () => dialog.close(), 'secondary-button'), Object.assign(el('button', 'primary-button', existing ? 'Сохранить' : 'Создать'), { type: 'submit' }))
     form.append(heading, name.label, colours, actions)
     form.addEventListener('submit', async (event) => {
       event.preventDefault()
+      const normalizedName = name.input.value.trim()
+      if (!normalizedName) {
+        name.input.setCustomValidity('Введите название календаря')
+        name.input.reportValidity()
+        return
+      }
+      name.input.setCustomValidity('')
+      const color = parseCalendarColor(new FormData(form).get('color'))
+      if (existing) {
+        dialog.close()
+        await this.commit(updateCalendarDetails(this.state, existing.id, normalizedName, color))
+        return
+      }
       const now = new Date().toISOString()
-      const calendar: PlannerCalendar = { id: crypto.randomUUID(), name: name.input.value.trim(), color: parseCalendarColor(new FormData(form).get('color')), visible: true, createdAt: now }
+      const calendar: PlannerCalendar = { id: crypto.randomUUID(), name: normalizedName, color, visible: true, createdAt: now }
       dialog.close()
       await this.commit({ ...this.state, calendars: [...this.state.calendars, calendar] })
     })

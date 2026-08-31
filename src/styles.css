@@ -107,9 +107,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .workspace--map .calendars-panel, .workspace--map .day-panel { position: static; min-height: 0; overflow: auto; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 13px; }
 .panel-heading h2 { margin: 3px 0 0; font: 500 18px/1.2 Georgia, serif; }
-.calendar-row { display: grid; grid-template-columns: 18px 10px 1fr; gap: 8px; align-items: center; padding: 8px 2px; font-size: 14px; }
-.calendar-row input { width: 17px; height: 17px; accent-color: var(--accent); }
+.calendar-row { display: flex; align-items: center; gap: 3px; padding: 4px 0; font-size: 14px; }
+.calendar-toggle { min-width: 0; flex: 1 1 auto; display: grid; grid-template-columns: 18px 10px minmax(0, 1fr); gap: 7px; align-items: center; padding: 4px 2px; }
+.calendar-toggle input { width: 17px; height: 17px; accent-color: var(--accent); }
 .calendar-dot { width: 9px; height: 9px; border-radius: 50%; }
+.calendar-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.calendar-edit { flex: 0 0 auto; min-width: 28px; min-height: 28px; padding: 1px 4px 5px; border-color: transparent; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; }
+.calendar-row:hover .calendar-edit, .calendar-edit:focus-visible { color: var(--ink); border-color: var(--line); }
 .microcopy { color: var(--muted); font-size: 12px; line-height: 1.45; }
 
 .months { display: grid; gap: 8px; min-width: 0; min-height: 0; }

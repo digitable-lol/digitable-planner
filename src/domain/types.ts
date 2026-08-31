@@ -45,6 +45,18 @@ export interface PlannerState {
   events: PlannerEvent[]
 }
 
+export function updateCalendarDetails(state: PlannerState, calendarId: string, name: string, color: CalendarColor): PlannerState {
+  const normalizedName = name.trim()
+  if (!normalizedName) throw new Error('Введите название календаря')
+  if (!state.calendars.some((calendar) => calendar.id === calendarId)) throw new Error('Календарь не найден')
+  return {
+    ...state,
+    calendars: state.calendars.map((calendar) => calendar.id === calendarId
+      ? { ...calendar, name: normalizedName, color }
+      : calendar),
+  }
+}
+
 export const PALETTE = ['#40e0d0', '#69a7ff', '#75d69c', '#b58cff', '#ffad66', '#ff7d86'] as const satisfies readonly CalendarColor[]
 
 export function assertSafeCalendarColors(state: Pick<PlannerState, 'calendars'>): void {

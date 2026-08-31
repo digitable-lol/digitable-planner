@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { addDays, addMonths, addYears, dateRange, localDate, parseLocalDate } from '../src/domain/dates'
 import { expandEvent } from '../src/domain/recurrence'
-import type { PlannerEvent } from '../src/domain/types'
+import { updateCalendarDetails, type PlannerEvent, type PlannerState } from '../src/domain/types'
 
 const event: PlannerEvent = {
   id: 'event-1', calendarId: 'calendar-1', title: 'Review', description: '',
@@ -39,5 +39,20 @@ describe('recurrence expansion', () => {
   it('clamps a monthly recurrence on short months', () => {
     const occurrences = expandEvent({ ...event, startDate: '2026-01-31', endDateExclusive: '2026-02-01', recurrence: { frequency: 'monthly', interval: 1 } }, '2026-01-01', '2026-04-01')
     expect(occurrences.map(({ startDate }) => startDate)).toEqual(['2026-01-31', '2026-02-28', '2026-03-31'])
+  })
+})
+
+describe('calendar details', () => {
+  it('renames and recolours a calendar without changing identity, visibility or event links', () => {
+    const state: PlannerState = {
+      schemaVersion: 1,
+      calendars: [{ id: 'calendar-1', name: 'Личное', color: '#40e0d0', visible: false, createdAt: '2026-01-01T00:00:00.000Z' }],
+      events: [event],
+    }
+    const updated = updateCalendarDetails(state, 'calendar-1', '  Работа  ', '#69a7ff')
+    expect(updated.calendars).toEqual([{ id: 'calendar-1', name: 'Работа', color: '#69a7ff', visible: false, createdAt: '2026-01-01T00:00:00.000Z' }])
+    expect(updated.events).toBe(state.events)
+    expect(() => updateCalendarDetails(state, 'calendar-1', '   ', '#69a7ff')).toThrow('Введите название')
+    expect(() => updateCalendarDetails(state, 'missing', 'Работа', '#69a7ff')).toThrow('не найден')
   })
 })
