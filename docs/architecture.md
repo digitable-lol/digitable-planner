@@ -4,9 +4,9 @@
 
 The planner is a browser-only application. Calendar data is stored in the
 `digitable-planner` IndexedDB database and is never sent by product code. The
-service worker caches only the four declared shell paths and Vite's hashed
-JavaScript/CSS/map assets. `.ics`, `.dplan`, JSON and `/provider/**` paths do
-not match the cache allowlist.
+service worker caches only its explicit shell allowlist (document, manifest,
+canonical icons and local JavaScript/CSS/map assets). `.ics`, `.dplan`, JSON
+and `/provider/**` paths do not match the cache allowlist.
 
 The Courses embed contract accepts only version 1 messages from the exact
 `https://courses.digitable.life` origin. Its payload is limited to theme,

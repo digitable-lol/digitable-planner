@@ -17,7 +17,12 @@ Playwright and automated WCAG audits remain a later rollout gate.
 
 Manual browser evidence recorded on 2026-09-01:
 
-- desktop and 390 × 844 responsive layouts rendered without console errors;
+- at 1440 × 900 and 1280 × 800 the classic view rendered all 12 months as
+  four columns by three rows with document height equal to the viewport;
+- at 390 × 844 the planner rendered one column without horizontal overflow,
+  preserved the original 22 × 22 date controls, and logged no console errors;
+- dark/light colours use the measured Courses tokens and the four PWA/header
+  logos are byte-identical to the canonical Courses assets;
 - a three-day event appeared in the year and selected-day surfaces;
 - the event survived a full reload through IndexedDB;
 - the capability screen showed two `UNVERIFIED` provider labels and an install
