@@ -8,6 +8,10 @@ interface PlannerMessage {
   payload: unknown
 }
 
+export function isEmbedPath(pathname: string): boolean {
+  return pathname.replace(/\/+$/, '') === '/embed'
+}
+
 function isMessage(value: unknown): value is PlannerMessage {
   if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>

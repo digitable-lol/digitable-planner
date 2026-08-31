@@ -56,7 +56,7 @@ export class PlannerApp {
   private selectedCityId?: string
   private settingsOpen = false
 
-  constructor(private readonly root: HTMLElement) {}
+  constructor(private readonly root: HTMLElement, private readonly embedded = false) {}
 
   async start(): Promise<void> {
     try {
@@ -112,7 +112,7 @@ export class PlannerApp {
     document.documentElement.dataset.plannerView = this.viewMode
     this.root.replaceChildren()
     const shell = el('div', 'app-shell')
-    shell.append(this.renderHeader())
+    if (!this.embedded) shell.append(this.renderHeader())
     if (this.persistenceError) {
       const warning = el('div', 'notice notice--danger', this.persistenceError)
       warning.setAttribute('role', 'alert')
@@ -165,8 +165,10 @@ export class PlannerApp {
     const modes = el('div', 'mode-controls')
     const viewSelect = this.selectControl('Раскладка', [['year', '12 месяцев'], ['flow', 'Лента'], ['map', 'Карта']], this.viewMode, (value) => { this.viewMode = value as ViewMode; this.render() })
     const displaySelect = this.selectControl('События', [['banners', 'Плашки'], ['heatmap', 'Нагрузка']], this.displayMode, (value) => { this.displayMode = value as DisplayMode; this.render() })
-    const full = this.textButton('На весь экран', () => this.enterFullScreen())
-    modes.append(viewSelect, displaySelect, full, this.textButton('+ Событие', () => this.openEventDialog(this.selectedDate)))
+    modes.append(viewSelect, displaySelect)
+    if (this.embedded) modes.append(this.textButton('Данные', () => this.openSettingsDialog()))
+    else modes.append(this.textButton('На весь экран', () => this.enterFullScreen()))
+    modes.append(this.textButton('+ Событие', () => this.openEventDialog(this.selectedDate)))
     toolbar.append(yearControl, modes)
 
     const layout = el('div', `planner-layout${this.viewMode === 'map' ? ' planner-layout--map' : ''}`)

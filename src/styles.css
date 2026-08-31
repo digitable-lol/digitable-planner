@@ -209,6 +209,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .color-choice input:checked + span { outline: 2px solid var(--ink); }
 .color-choice input:focus-visible + span { outline: 3px solid var(--focus); }
 
+html[data-embed="true"] .workspace {
+  max-width: none;
+  padding: 10px 12px 12px;
+}
+html[data-embed="true"] .workspace--year,
+html[data-embed="true"] .workspace--map { height: 100dvh; }
+html[data-embed="true"] .toolbar { min-height: 36px; margin-bottom: 8px; }
+html[data-embed="true"] .year-title { font-size: clamp(28px, 3vw, 40px); }
+html[data-embed="true"] .icon-button,
+html[data-embed="true"] .text-button,
+html[data-embed="true"] .compact-field select { min-height: 34px; }
+html[data-embed="true"] .calendars-panel .microcopy { display: none; }
+
 @media (max-width: 1180px) {
   .workspace--year, .workspace--map { height: auto; min-height: calc(100dvh - 64px); overflow: visible; }
   .planner-layout { grid-template-columns: 150px 1fr; }
@@ -216,6 +229,18 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .months--year { height: auto; grid-template-columns: repeat(2, minmax(220px, 1fr)); grid-template-rows: none; overflow: visible; }
   .month-card { min-height: 226px; }
   .city-map-pane { min-height: 610px; }
+}
+
+/* Compact desktop containers still have room for the dense year. The ordinary
+   tablet breakpoint must not turn that embedded year into a clipped
+   two-column document between 1020 and 1180 px. */
+@media (min-width: 1020px) and (max-width: 1180px) {
+  html[data-embed="true"] .workspace--year,
+  html[data-embed="true"] .workspace--map { height: 100dvh; min-height: 0; overflow: hidden; }
+  html[data-embed="true"] .planner-layout { grid-template-columns: 126px minmax(0, 1fr) 182px; gap: 10px; }
+  html[data-embed="true"] .day-panel { grid-column: auto; min-height: 0; padding: 0 0 0 12px; border-left: 1px solid var(--line); overflow: auto; }
+  html[data-embed="true"] .months--year { height: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); overflow: hidden; }
+  html[data-embed="true"] .month-card { min-height: 0; padding: 7px; }
 }
 
 @media (max-width: 760px) {
@@ -245,6 +270,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .settings-grid { grid-template-columns: 1fr; margin-top: 28px; }
   .settings-dialog .settings-hero { padding: 16px; }
   .settings-dialog .settings-grid { margin-top: 16px; }
+  html[data-embed="true"] .workspace--year,
+  html[data-embed="true"] .workspace--map { height: auto; min-height: 100dvh; overflow: visible; }
 }
 
 @media (prefers-reduced-motion: reduce) {

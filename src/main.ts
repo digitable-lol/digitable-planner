@@ -1,7 +1,10 @@
 import './styles.css'
 import { PlannerApp } from './planner-app'
+import { isEmbedPath } from './embed'
 
 const releaseUrl = new URL(window.location.href)
+const embedded = isEmbedPath(releaseUrl.pathname)
+document.documentElement.dataset.embed = embedded ? 'true' : 'false'
 if (releaseUrl.searchParams.has('release')) {
   releaseUrl.searchParams.delete('release')
   history.replaceState(null, '', `${releaseUrl.pathname}${releaseUrl.search}${releaseUrl.hash}`)
@@ -10,7 +13,7 @@ if (releaseUrl.searchParams.has('release')) {
 const root = document.querySelector<HTMLDivElement>('#app')
 if (!root) throw new Error('App root is missing')
 
-const app = new PlannerApp(root)
+const app = new PlannerApp(root, embedded)
 void app.start()
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

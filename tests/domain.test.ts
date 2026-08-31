@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { addDays, addMonths, addYears, dateRange, localDate, parseLocalDate } from '../src/domain/dates'
 import { expandEvent } from '../src/domain/recurrence'
+import { isEmbedPath } from '../src/embed'
 import { updateCalendarDetails, type PlannerEvent, type PlannerState } from '../src/domain/types'
 
 const event: PlannerEvent = {
@@ -54,5 +55,14 @@ describe('calendar details', () => {
     expect(updated.events).toBe(state.events)
     expect(() => updateCalendarDetails(state, 'calendar-1', '   ', '#69a7ff')).toThrow('Введите название')
     expect(() => updateCalendarDetails(state, 'missing', 'Работа', '#69a7ff')).toThrow('не найден')
+  })
+})
+
+describe('embed route', () => {
+  it('only strips standalone chrome on the dedicated embed path', () => {
+    expect(isEmbedPath('/embed/')).toBe(true)
+    expect(isEmbedPath('/embed')).toBe(true)
+    expect(isEmbedPath('/')).toBe(false)
+    expect(isEmbedPath('/calendar/embed/')).toBe(false)
   })
 })

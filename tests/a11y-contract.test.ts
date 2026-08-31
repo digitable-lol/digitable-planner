@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(new URL('../src/planner-app.ts', import.meta.url), 'utf8')
+const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8')
 const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 
@@ -89,5 +90,15 @@ describe('accessibility contract', () => {
     expect(source).toContain('updateCalendarDetails(this.state, existing.id')
     expect(source).toContain('!PALETTE.some((color) => color === existing.color)')
     expect(css).toContain('.calendar-edit')
+  })
+
+  it('renders the Courses route as a compact microfrontend without duplicate chrome', () => {
+    expect(main).toContain("document.documentElement.dataset.embed = embedded ? 'true' : 'false'")
+    expect(source).toContain('if (!this.embedded) shell.append(this.renderHeader())')
+    expect(source).toContain("this.textButton('Данные', () => this.openSettingsDialog())")
+    expect(source).toContain("else modes.append(this.textButton('На весь экран'")
+    expect(css).toContain('html[data-embed="true"] .workspace--year')
+    expect(css).toContain('@media (min-width: 1020px) and (max-width: 1180px)')
+    expect(css).toContain('grid-template-columns: 126px minmax(0, 1fr) 182px')
   })
 })
