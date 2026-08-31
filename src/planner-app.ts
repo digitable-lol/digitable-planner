@@ -12,7 +12,6 @@ import { providerCapabilities } from './sync/provider'
 
 type ViewMode = 'year' | 'flow' | 'map'
 type DisplayMode = 'banners' | 'heatmap'
-type AppSection = 'planner' | 'settings'
 
 const monthNames = new Intl.DateTimeFormat('ru-RU', { month: 'long' })
 const fullDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -49,13 +48,13 @@ export class PlannerApp {
   private state: PlannerState = blankState()
   private year = new Date().getFullYear()
   private selectedDate: LocalDate = todayLocal()
-  private section: AppSection = 'planner'
   private viewMode: ViewMode = 'year'
   private displayMode: DisplayMode = 'banners'
   private persistenceError = ''
   private restorePreview?: RestorePreview
   private installPrompt?: Event & { prompt(): Promise<void> }
   private selectedCityId?: string
+  private settingsOpen = false
 
   constructor(private readonly root: HTMLElement) {}
 
@@ -110,7 +109,7 @@ export class PlannerApp {
   }
 
   private render(): void {
-    document.documentElement.dataset.plannerView = this.section === 'planner' ? this.viewMode : 'page'
+    document.documentElement.dataset.plannerView = this.viewMode
     this.root.replaceChildren()
     const shell = el('div', 'app-shell')
     shell.append(this.renderHeader())
@@ -119,8 +118,10 @@ export class PlannerApp {
       warning.setAttribute('role', 'alert')
       shell.append(warning)
     }
-    shell.append(this.section === 'planner' ? this.renderPlanner() : this.renderSettings())
-    this.root.append(shell, this.renderEventDialog(), this.renderCalendarDialog())
+    shell.append(this.renderPlanner())
+    const settings = this.renderSettingsDialog()
+    this.root.append(shell, this.renderEventDialog(), this.renderCalendarDialog(), settings)
+    if (this.settingsOpen) requestAnimationFrame(() => { if (settings.isConnected && !settings.open) settings.showModal() })
   }
 
   private renderHeader(): HTMLElement {
@@ -129,11 +130,11 @@ export class PlannerApp {
     brand.type = 'button'
     brand.setAttribute('aria-label', 'Открыть планировщик')
     brand.innerHTML = '<img class="brand__logo" src="/digitable-logo-96.png" alt=""><span>Digitable <strong>Planner</strong></span>'
-    brand.addEventListener('click', () => { this.section = 'planner'; this.render() })
+    brand.addEventListener('click', () => document.querySelector<HTMLElement>('#planner')?.focus())
     const nav = el('nav', 'topnav')
     nav.setAttribute('aria-label', 'Основная навигация')
-    const planner = this.headerButton('Год', this.section === 'planner', () => { this.section = 'planner'; this.render() })
-    const settings = this.headerButton('Данные и подключения', this.section === 'settings', () => { this.section = 'settings'; this.render() })
+    const planner = this.headerButton('Год', true, () => document.querySelector<HTMLElement>('#planner')?.focus())
+    const settings = this.headerButton('Данные и подключения', false, () => this.openSettingsDialog())
     nav.append(planner, settings)
     const privacy = el('span', 'privacy-pill', 'Локально · без аккаунта')
     header.append(brand, nav, privacy)
@@ -367,17 +368,35 @@ export class PlannerApp {
     return aside
   }
 
-  private renderSettings(): HTMLElement {
-    const main = el('main', 'settings-page')
-    main.id = 'planner'
-    main.tabIndex = -1
+  private renderSettingsDialog(): HTMLDialogElement {
+    const dialog = el('dialog', 'dialog settings-dialog')
+    dialog.id = 'settings-dialog'
+    dialog.setAttribute('aria-labelledby', 'settings-dialog-title')
+    dialog.addEventListener('close', () => { this.settingsOpen = false })
     const hero = el('section', 'settings-hero')
-    hero.append(el('p', 'eyebrow', 'Ваши данные — ваши'), el('h1', '', 'Резервные копии и подключения'), el('p', 'lede', 'Планировщик работает без аккаунта. Мы не отправляем календарь, не ставим аналитику и не подключаем провайдеры скрыто.'))
+    const heading = el('div', 'dialog-heading')
+    const title = el('div')
+    const titleText = el('h2', '', 'Данные и подключения')
+    titleText.id = 'settings-dialog-title'
+    title.append(el('p', 'eyebrow', 'Ваши данные — ваши'), titleText)
+    heading.append(title, this.iconButton('×', 'Закрыть', () => this.closeSettingsDialog()))
+    hero.append(heading, el('p', 'lede', 'Локальные действия и перенос данных — без аккаунта, аналитики и скрытых подключений.'))
     const grid = el('div', 'settings-grid')
     grid.append(this.renderBackupCard(), this.renderIcsCard(), this.renderProviderCard(), this.renderAppCard())
     hero.append(grid)
-    main.append(hero)
-    return main
+    dialog.append(hero)
+    return dialog
+  }
+
+  private openSettingsDialog(): void {
+    this.settingsOpen = true
+    const dialog = document.querySelector<HTMLDialogElement>('#settings-dialog')
+    if (dialog && !dialog.open) dialog.showModal()
+  }
+
+  private closeSettingsDialog(): void {
+    this.settingsOpen = false
+    document.querySelector<HTMLDialogElement>('#settings-dialog')?.close()
   }
 
   private renderBackupCard(): HTMLElement {
@@ -410,7 +429,7 @@ export class PlannerApp {
     const restored = restoreAsCopy(this.state, this.restorePreview)
     if (!await this.commit(restored)) return
     this.restorePreview = undefined
-    this.section = 'planner'
+    this.settingsOpen = false
     if (focusDate) {
       this.selectedDate = focusDate
       this.year = parseLocalDate(focusDate).getUTCFullYear()
@@ -473,8 +492,21 @@ export class PlannerApp {
       }
     }))
     card.append(this.textButton('На весь экран', () => this.enterFullScreen()))
+    card.append(this.textButton('Сбросить календарь', () => this.resetCalendar(), 'danger-button reset-button'))
     card.append(el('p', 'microcopy', 'Офлайн-оболочка сохраняется после первого успешного открытия. Календарные данные не попадают в кэш приложения.'))
     return card
+  }
+
+  private async resetCalendar(): Promise<void> {
+    if (!confirm('Удалить все локальные календари и события? Перед сбросом можно скачать .dplan. Это действие нельзя отменить без резервной копии.')) return
+    if (!await this.commit(blankState())) return
+    this.settingsOpen = false
+    this.restorePreview = undefined
+    this.year = new Date().getFullYear()
+    this.selectedDate = todayLocal()
+    this.selectedCityId = undefined
+    this.viewMode = 'year'
+    this.render()
   }
 
   private settingsCard(title: string, description: string): HTMLElement {

@@ -70,4 +70,14 @@ describe('accessibility contract', () => {
     expect(source).toContain("el('div', 'city-timeline')")
     expect(css).toContain('.city-marker:focus-visible')
   })
+
+  it('keeps data actions in a labelled modal and guards local reset', () => {
+    expect(source).toContain("el('dialog', 'dialog settings-dialog')")
+    expect(source).toContain("settings-dialog-title")
+    expect(source).toContain('settings.showModal()')
+    expect(source).toContain("'Сбросить календарь'")
+    expect(source).toContain("if (!confirm('Удалить все локальные календари и события?")
+    expect(source).toContain('this.commit(blankState())')
+    expect(css).toContain('.settings-dialog')
+  })
 })

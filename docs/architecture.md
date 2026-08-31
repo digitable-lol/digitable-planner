@@ -7,8 +7,10 @@ The planner is a browser-only application. Calendar data is stored in the
 service worker caches only its explicit shell allowlist (document, manifest,
 canonical icons and local JavaScript/CSS assets). `.ics`, `.dplan`, JSON
 and `/provider/**` paths do not match the cache allowlist.
-Shell bundle names are revisioned when the cache namespace changes, so an old
-cache-first worker cannot pin a new document to stale JavaScript or CSS.
+Shell bundles use content hashes. Navigations are network-first with a cached
+document fallback; immutable local assets are cache-first. A prior worker can
+therefore discover a new document and new bundle URLs without a release query,
+while a verified cached shell still launches offline.
 
 The Courses embed contract accepts only version 1 messages from the exact
 `https://courses.digitable.life` origin. Its payload is limited to theme,
@@ -41,6 +43,9 @@ creates new calendar and event IDs and never overwrites existing state. ICS
 imports are parsed completely before commit and conflicting UIDs receive new
 local IDs. Restored calendar copies are made visible and the UI moves to the
 earliest restored event so a successful restore is observable immediately.
+Data actions live in a modal over the planner. Reset requires explicit browser
+confirmation, replaces only the local Planner state with a fresh calendar, and
+broadcasts the same payload-free invalidation used by ordinary commits.
 
 ## City map
 

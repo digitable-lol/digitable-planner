@@ -182,6 +182,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .dialog { width: min(500px, calc(100% - 28px)); border: 1px solid var(--line); border-radius: 16px; background: var(--surface); color: var(--ink); padding: 0; box-shadow: 0 22px 70px #0005; }
 .dialog::backdrop { background: #1119; backdrop-filter: blur(4px); }
+.settings-dialog { width: min(980px, calc(100% - 28px)); max-height: min(860px, calc(100dvh - 28px)); overflow: auto; }
+.settings-dialog .settings-hero { padding: 22px; }
+.settings-dialog .settings-hero .dialog-heading h2 { margin: 3px 0 0; font: 500 30px/1.05 Georgia, serif; }
+.settings-dialog .lede { margin: 12px 0 0; font-size: 14px; }
+.settings-dialog .settings-grid { margin-top: 20px; }
+.settings-dialog .settings-card { min-height: 0; padding: 16px; }
+.settings-dialog .settings-card h2 { font-size: 19px; }
+.reset-button { width: 100%; margin: 2px 0 0; border-color: color-mix(in srgb, #ff7d86 55%, var(--line)); }
 .dialog-form { display: flex; flex-direction: column; gap: 14px; padding: 22px; }
 .dialog-heading { display: flex; justify-content: space-between; align-items: center; }
 .dialog-heading h2 { font: 500 25px/1.2 Georgia, serif; margin: 0; }
@@ -231,6 +239,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .city-marker__label { display: none; }
   .city-timeline { max-height: none; overflow-x: auto; }
   .settings-grid { grid-template-columns: 1fr; margin-top: 28px; }
+  .settings-dialog .settings-hero { padding: 16px; }
+  .settings-dialog .settings-grid { margin-top: 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

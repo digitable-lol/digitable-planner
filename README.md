@@ -12,6 +12,7 @@ provider connection.
   geolocation requests;
 - IndexedDB persistence with live same-origin tab refresh, `.ics` import/export
   and checked `.dplan` backups;
+- compact data/connections modal with a confirmed local-calendar reset;
 - installable PWA, full-view mode and a narrow Courses embed contract;
 - exact Digitable dark/light palette and canonical Digitable PWA icons.
 
