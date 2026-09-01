@@ -13,12 +13,13 @@ describe('first-slice falsifiers', () => {
   })
 
   it('runtime cache is an explicit shell allowlist, excluding user and provider data', () => {
-    expect(serviceWorker).toContain("'digitable-planner-shell-v8'")
+    expect(serviceWorker).toContain("'digitable-planner-shell-v9'")
     expect(serviceWorker).toContain("request.mode === 'navigate'")
     expect(serviceWorker).toContain("fetch(request).then")
     expect(serviceWorker).toContain("caches.match('/index.html')")
     expect(serviceWorker).toContain('function isShellAsset')
     expect(serviceWorker).toContain("if (!isShellAsset(url.pathname)) return")
+    expect(serviceWorker.indexOf("request.mode === 'navigate'")).toBeLessThan(serviceWorker.indexOf("if (!isShellAsset(url.pathname)) return"))
     expect(serviceWorker).toContain("/^\\/assets\\/[^/]+\\.(?:js|css|map)$/")
     for (const path of ['/calendar.ics', '/backup.dplan', '/provider/caldav', '/anything.json']) {
       const shell = ['/', '/index.html', '/manifest.webmanifest', '/digitable-logo-96.png', '/digitable-logo-192.png', '/digitable-logo-512.png', '/digitable-logo-maskable-512.png'].includes(path)
