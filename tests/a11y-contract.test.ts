@@ -38,8 +38,8 @@ describe('accessibility contract', () => {
     expect(css).toContain('.workspace--year')
 
     for (const [width, height] of [[1440, 900], [1280, 800]]) {
-      const workspaceInnerWidth = Math.min(width, 1440) - 40
-      const monthAreaWidth = workspaceInnerWidth - 148 - 210 - 24
+      const workspaceInnerWidth = width - 40
+      const monthAreaWidth = workspaceInnerWidth - 170 - 180 - 20
       const monthWidth = (monthAreaWidth - 24) / 4
       const workspaceInnerHeight = height - 64 - 12 - 14
       const monthAreaHeight = workspaceInnerHeight - 40 - 10
@@ -90,15 +90,24 @@ describe('accessibility contract', () => {
     expect(source).toContain('updateCalendarDetails(this.state, existing.id')
     expect(source).toContain('!PALETTE.some((color) => color === existing.color)')
     expect(css).toContain('.calendar-edit')
+    expect(source).toContain("this.textButton('Удалить'")
+    expect(source).toContain('deleteCalendar(this.state, existing.id)')
+    expect(source).toContain('remove.disabled = this.state.calendars.length === 1')
   })
 
   it('renders the Courses route as a compact microfrontend without duplicate chrome', () => {
     expect(main).toContain("document.documentElement.dataset.embed = embedded ? 'true' : 'false'")
-    expect(source).toContain('if (!this.embedded) shell.append(this.renderHeader())')
+    expect(source).toContain('if (!this.embedded && !this.cleanView) shell.append(this.renderHeader())')
     expect(source).toContain("this.textButton('Данные', () => this.openSettingsDialog())")
     expect(source).toContain("else modes.append(this.textButton('На весь экран'")
     expect(css).toContain('html[data-embed="true"] .workspace--year')
     expect(css).toContain('@media (min-width: 1020px) and (max-width: 1180px)')
-    expect(css).toContain('grid-template-columns: 126px minmax(0, 1fr) 182px')
+    expect(css).toContain('grid-template-columns: 152px minmax(0, 1fr) 156px')
+    expect(source).toContain("this.textButton('Скрыть меню'")
+    expect(source).toContain("`${this.year} · Показать меню`")
+    expect(css).toContain('@media (orientation: portrait) and (min-width: 1020px)')
+    expect(css).toContain('grid-template-rows: repeat(4, clamp(210px, 23vw, 250px))')
+    expect(css).toContain('.workspace--clean .calendars-panel')
+    expect(css).toContain('html[data-embed="true"] .workspace--clean .planner-layout')
   })
 })

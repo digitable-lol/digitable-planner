@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { addDays, addMonths, addYears, dateRange, localDate, parseLocalDate } from '../src/domain/dates'
 import { expandEvent } from '../src/domain/recurrence'
 import { isEmbedPath } from '../src/embed'
-import { updateCalendarDetails, type PlannerEvent, type PlannerState } from '../src/domain/types'
+import { deleteCalendar, updateCalendarDetails, type PlannerEvent, type PlannerState } from '../src/domain/types'
 
 const event: PlannerEvent = {
   id: 'event-1', calendarId: 'calendar-1', title: 'Review', description: '',
@@ -55,6 +55,23 @@ describe('calendar details', () => {
     expect(updated.events).toBe(state.events)
     expect(() => updateCalendarDetails(state, 'calendar-1', '   ', '#69a7ff')).toThrow('Введите название')
     expect(() => updateCalendarDetails(state, 'missing', 'Работа', '#69a7ff')).toThrow('не найден')
+  })
+
+  it('deletes a calendar and only its linked events, while preserving a usable last calendar', () => {
+    const otherEvent = { ...event, id: 'event-2', calendarId: 'calendar-2' }
+    const state: PlannerState = {
+      schemaVersion: 1,
+      calendars: [
+        { id: 'calendar-1', name: 'Личное', color: '#40e0d0', visible: true, createdAt: '2026-01-01T00:00:00.000Z' },
+        { id: 'calendar-2', name: 'Работа', color: '#69a7ff', visible: true, createdAt: '2026-01-01T00:00:00.000Z' },
+      ],
+      events: [event, otherEvent],
+    }
+    const updated = deleteCalendar(state, 'calendar-1')
+    expect(updated.calendars.map(({ id }) => id)).toEqual(['calendar-2'])
+    expect(updated.events).toEqual([otherEvent])
+    expect(() => deleteCalendar(updated, 'calendar-2')).toThrow('единственный')
+    expect(() => deleteCalendar(state, 'missing')).toThrow('не найден')
   })
 })
 

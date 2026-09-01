@@ -84,7 +84,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .notice { margin: 16px 24px 0; padding: 12px 16px; border-radius: 10px; }
 .notice--danger { background: color-mix(in srgb, #ff7d86 12%, var(--surface)); color: var(--ink); border: 1px solid #ff7d86; }
-.workspace { max-width: 1440px; margin: 0 auto; padding: 12px 20px 14px; }
+.workspace { width: 100%; max-width: none; margin: 0 auto; padding: 12px 20px 14px; }
 .workspace--year, .workspace--map { height: calc(100dvh - 64px); display: flex; flex-direction: column; overflow: hidden; }
 .toolbar { min-height: 40px; flex: 0 0 auto; display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 10px; }
 .year-control, .mode-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -99,9 +99,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .text-button:hover, .icon-button:hover, .secondary-button:hover, .file-button:hover { border-color: var(--ink); }
 .primary-button { background: var(--accent); color: var(--course-on-accent); border-color: var(--accent); font-weight: 650; }
 .danger-button { background: transparent; color: #ff7d86; border-color: transparent; margin-right: auto; }
+.danger-button:disabled { cursor: not-allowed; opacity: .45; }
 .compact-field select { min-height: 38px; background: var(--surface); border: 1px solid var(--line); padding: 6px 32px 6px 10px; }
 
-.planner-layout { min-height: 0; flex: 1 1 auto; display: grid; grid-template-columns: 148px minmax(0, 1fr) 210px; gap: 12px; align-items: stretch; }
+.planner-layout { min-height: 0; flex: 1 1 auto; display: grid; grid-template-columns: 170px minmax(0, 1fr) 180px; gap: 10px; align-items: stretch; }
 .calendars-panel, .day-panel { position: sticky; top: 88px; }
 .workspace--year .calendars-panel, .workspace--year .day-panel,
 .workspace--map .calendars-panel, .workspace--map .day-panel { position: static; min-height: 0; overflow: auto; }
@@ -115,6 +116,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .calendar-edit { flex: 0 0 auto; min-width: 28px; min-height: 28px; padding: 1px 4px 5px; border-color: transparent; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; }
 .calendar-row:hover .calendar-edit, .calendar-edit:focus-visible { color: var(--ink); border-color: var(--line); }
 .microcopy { color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+.clean-view-exit { display: none; }
+.workspace--clean { height: 100dvh; padding: 6px; }
+.workspace--clean .toolbar,
+.workspace--clean .calendars-panel,
+.workspace--clean .day-panel { display: none; }
+.workspace--clean .planner-layout { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.workspace--clean .clean-view-exit {
+  position: fixed;
+  z-index: 30;
+  top: 10px;
+  right: 10px;
+  display: block;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--course-radius);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink);
+  box-shadow: 0 5px 22px #0005;
+  backdrop-filter: blur(12px);
+}
 
 .months { display: grid; gap: 8px; min-width: 0; min-height: 0; }
 .months--year { height: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); overflow: hidden; }
@@ -237,10 +260,31 @@ html[data-embed="true"] .calendars-panel .microcopy { display: none; }
 @media (min-width: 1020px) and (max-width: 1180px) {
   html[data-embed="true"] .workspace--year,
   html[data-embed="true"] .workspace--map { height: 100dvh; min-height: 0; overflow: hidden; }
-  html[data-embed="true"] .planner-layout { grid-template-columns: 126px minmax(0, 1fr) 182px; gap: 10px; }
+  html[data-embed="true"] .planner-layout { grid-template-columns: 152px minmax(0, 1fr) 156px; gap: 8px; }
   html[data-embed="true"] .day-panel { grid-column: auto; min-height: 0; padding: 0 0 0 12px; border-left: 1px solid var(--line); overflow: auto; }
   html[data-embed="true"] .months--year { height: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); overflow: hidden; }
   html[data-embed="true"] .month-card { min-height: 0; padding: 7px; }
+}
+
+html[data-embed="true"] .workspace--clean .planner-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+/* A tall embedded viewport used to stretch three fractional rows through the
+   full screen. Keep month cards readable and fit the whole year as 3 by 4. */
+@media (orientation: portrait) and (min-width: 1020px) {
+  html[data-embed="true"] .months--year {
+    height: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(4, clamp(210px, 23vw, 250px));
+    align-content: start;
+    overflow: auto;
+  }
+  html[data-embed="true"] .workspace--clean .months--year {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: repeat(3, clamp(210px, 23vw, 250px));
+  }
 }
 
 @media (max-width: 760px) {
@@ -272,6 +316,7 @@ html[data-embed="true"] .calendars-panel .microcopy { display: none; }
   .settings-dialog .settings-grid { margin-top: 16px; }
   html[data-embed="true"] .workspace--year,
   html[data-embed="true"] .workspace--map { height: auto; min-height: 100dvh; overflow: visible; }
+  .workspace--clean { min-height: 100dvh; height: auto; padding: 4px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

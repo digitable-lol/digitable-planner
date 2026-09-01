@@ -43,3 +43,8 @@ export function requestFullView(): void {
   if (window.parent === window) return
   window.parent.postMessage({ namespace: NAMESPACE, version: 1, type: 'open', payload: { mode: 'full' } }, TRUSTED_PARENT)
 }
+
+export function requestCleanView(enabled: boolean): void {
+  if (window.parent === window) return
+  window.parent.postMessage({ namespace: NAMESPACE, version: 1, type: 'clean-view', payload: { enabled } }, TRUSTED_PARENT)
+}

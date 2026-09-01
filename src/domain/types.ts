@@ -57,6 +57,16 @@ export function updateCalendarDetails(state: PlannerState, calendarId: string, n
   }
 }
 
+export function deleteCalendar(state: PlannerState, calendarId: string): PlannerState {
+  if (!state.calendars.some((calendar) => calendar.id === calendarId)) throw new Error('Календарь не найден')
+  if (state.calendars.length === 1) throw new Error('Нельзя удалить единственный календарь')
+  return {
+    ...state,
+    calendars: state.calendars.filter((calendar) => calendar.id !== calendarId),
+    events: state.events.filter((event) => event.calendarId !== calendarId),
+  }
+}
+
 export const PALETTE = ['#40e0d0', '#69a7ff', '#75d69c', '#b58cff', '#ffad66', '#ff7d86'] as const satisfies readonly CalendarColor[]
 
 export function assertSafeCalendarColors(state: Pick<PlannerState, 'calendars'>): void {

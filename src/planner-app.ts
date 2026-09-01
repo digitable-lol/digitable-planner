@@ -4,8 +4,8 @@ import { exportIcs, importIcs } from './data/ical'
 import { addDays, isWeekend, localDate, parseLocalDate, todayLocal } from './domain/dates'
 import { cityEventGroups } from './domain/city-map'
 import { expandEvent } from './domain/recurrence'
-import { blankState, parseCalendarColor, PALETTE, updateCalendarDetails, type LocalDate, type PlannerCalendar, type PlannerEvent, type PlannerState } from './domain/types'
-import { installEmbedContract, requestFullView } from './embed'
+import { blankState, deleteCalendar, parseCalendarColor, PALETTE, updateCalendarDetails, type LocalDate, type PlannerCalendar, type PlannerEvent, type PlannerState } from './domain/types'
+import { installEmbedContract, requestCleanView, requestFullView } from './embed'
 import { PlannerDatabase } from './storage/idb'
 import { PlannerStateSync } from './storage/state-sync'
 import { providerCapabilities } from './sync/provider'
@@ -55,6 +55,7 @@ export class PlannerApp {
   private installPrompt?: Event & { prompt(): Promise<void> }
   private selectedCityId?: string
   private settingsOpen = false
+  private cleanView = false
 
   constructor(private readonly root: HTMLElement, private readonly embedded = false) {}
 
@@ -72,6 +73,7 @@ export class PlannerApp {
     installEmbedContract((theme) => {
       document.documentElement.dataset.theme = theme
     })
+    window.addEventListener('pagehide', () => requestCleanView(false))
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault()
       this.installPrompt = event as typeof this.installPrompt
@@ -110,9 +112,10 @@ export class PlannerApp {
 
   private render(): void {
     document.documentElement.dataset.plannerView = this.viewMode
+    document.documentElement.dataset.cleanView = this.cleanView ? 'true' : 'false'
     this.root.replaceChildren()
     const shell = el('div', 'app-shell')
-    if (!this.embedded) shell.append(this.renderHeader())
+    if (!this.embedded && !this.cleanView) shell.append(this.renderHeader())
     if (this.persistenceError) {
       const warning = el('div', 'notice notice--danger', this.persistenceError)
       warning.setAttribute('role', 'alert')
@@ -150,9 +153,11 @@ export class PlannerApp {
   }
 
   private renderPlanner(): HTMLElement {
-    const main = el('main', `workspace workspace--${this.viewMode}`)
+    const main = el('main', `workspace workspace--${this.viewMode}${this.cleanView ? ' workspace--clean' : ''}`)
     main.id = 'planner'
     main.tabIndex = -1
+    const showMenus = this.textButton(`${this.year} · Показать меню`, () => this.setCleanView(false), 'clean-view-exit')
+    showMenus.setAttribute('aria-label', 'Показать меню планировщика')
     const toolbar = el('section', 'toolbar')
     toolbar.setAttribute('aria-label', 'Управление годом')
     const yearControl = el('div', 'year-control')
@@ -168,6 +173,9 @@ export class PlannerApp {
     modes.append(viewSelect, displaySelect)
     if (this.embedded) modes.append(this.textButton('Данные', () => this.openSettingsDialog()))
     else modes.append(this.textButton('На весь экран', () => this.enterFullScreen()))
+    const hideMenus = this.textButton('Скрыть меню', () => this.setCleanView(true))
+    hideMenus.classList.add('clean-view-enter')
+    modes.append(hideMenus)
     modes.append(this.textButton('+ Событие', () => this.openEventDialog(this.selectedDate)))
     toolbar.append(yearControl, modes)
 
@@ -179,8 +187,15 @@ export class PlannerApp {
       for (let month = 0; month < 12; month += 1) content.append(this.renderMonth(month))
     }
     layout.append(content, this.renderDayPanel())
-    main.append(toolbar, layout)
+    main.append(showMenus, toolbar, layout)
     return main
+  }
+
+  private setCleanView(enabled: boolean): void {
+    this.cleanView = enabled
+    requestCleanView(enabled)
+    this.render()
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(enabled ? '.clean-view-exit' : '.clean-view-enter')?.focus())
   }
 
   private renderSidebar(): HTMLElement {
@@ -199,6 +214,7 @@ export class PlannerApp {
       const dot = el('span', 'calendar-dot')
       dot.style.backgroundColor = calendar.color
       const name = el('span', 'calendar-name', calendar.name)
+      name.title = calendar.name
       const edit = this.iconButton('⋯', `Изменить календарь «${calendar.name}»`, () => this.openCalendarDialog(calendar))
       edit.classList.add('calendar-edit')
       toggle.append(checkbox, dot, name)
@@ -654,6 +670,18 @@ export class PlannerApp {
       label.append(input, swatch); colours.append(label)
     })
     const actions = el('div', 'dialog-actions')
+    if (existing) {
+      const eventCount = this.state.events.filter((item) => item.calendarId === existing.id).length
+      const remove = this.textButton('Удалить', async () => {
+        const eventsLabel = eventCount === 0 ? 'связанных событий нет' : `будет удалено событий: ${eventCount}`
+        if (!confirm(`Удалить календарь «${existing.name}»? ${eventsLabel}. Это действие нельзя отменить.`)) return
+        dialog.close()
+        await this.commit(deleteCalendar(this.state, existing.id))
+      }, 'danger-button')
+      remove.disabled = this.state.calendars.length === 1
+      if (remove.disabled) remove.title = 'Сначала создайте другой календарь'
+      actions.append(remove)
+    }
     actions.append(this.textButton('Отмена', () => dialog.close(), 'secondary-button'), Object.assign(el('button', 'primary-button', existing ? 'Сохранить' : 'Создать'), { type: 'submit' }))
     form.append(heading, name.label, colours, actions)
     form.addEventListener('submit', async (event) => {
