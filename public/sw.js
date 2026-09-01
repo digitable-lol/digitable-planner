@@ -1,4 +1,4 @@
-const CACHE = 'digitable-planner-shell-v9'
+const CACHE = 'digitable-planner-shell-v10'
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/digitable-logo-96.png', '/digitable-logo-192.png', '/digitable-logo-512.png', '/digitable-logo-maskable-512.png']
 
 function isShellAsset(pathname) {

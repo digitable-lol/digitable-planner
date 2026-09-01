@@ -11,7 +11,13 @@ provider connection.
 - banners and heatmap, editable local calendar names/colours, event CRUD and recurrence;
 - optional local start/end time with all-day compatibility and chronological agendas;
 - 106 bundled cities (74 in Russia), Leaflet controls over bundled Natural Earth
-  boundaries, chronological markers, and no tile, geocoder or geolocation requests;
+  boundaries, configurable picker allowlist, frequent-city ranking, and no tile,
+  geocoder or geolocation requests;
+- explicit numbered event itinerary plus offline travel maps at world and Russia
+  levels, derived only from cities already attached to visible events;
+- independent collapsible toolbar/calendar/statistics/agenda panels with persisted
+  default-collapse preferences;
+- browser-local PNG export for the visible calendar period and travel map;
 - standalone system/light/dark themes plus the inherited Courses embed theme;
 - all visible events in the right panel when no day is selected and period statistics
   below the calendar list;

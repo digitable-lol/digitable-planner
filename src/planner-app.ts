@@ -2,10 +2,12 @@ import { createBackup, previewBackup, restoreAsCopy, type RestorePreview } from 
 import { getCity, plannerCities } from './data/cities'
 import { exportIcs, importIcs } from './data/ical'
 import { addDays, isWeekend, localDate, parseLocalDate, todayLocal } from './domain/dates'
-import { cityEventGroups } from './domain/city-map'
+import { groupRankedCities, parseCityPreferences, rankSelectableCities, serializeCityPreferences } from './domain/city-preferences'
+import { deriveItinerary, type ItineraryStop, type TravelLevel } from './domain/itinerary'
 import { expandEvent } from './domain/recurrence'
 import { activeMonthIndexes, isDateInScope, type PeriodScope } from './domain/scope'
 import { blankState, deleteCalendar, parseCalendarColor, parseLocalTime, PALETTE, updateCalendarDetails, validateEventTiming, type LocalDate, type PlannerCalendar, type PlannerEvent, type PlannerState } from './domain/types'
+import { renderCalendarPng, renderRoutePng, type ExportPalette } from './export/png'
 import { installEmbedContract, requestCleanView, requestFullView } from './embed'
 import { PlannerDatabase } from './storage/idb'
 import { PlannerStateSync } from './storage/state-sync'
@@ -13,17 +15,27 @@ import { providerCapabilities } from './sync/provider'
 import L from 'leaflet'
 import { feature } from 'topojson-client'
 import countriesTopology from 'world-atlas/countries-110m.json'
-import type { GeoJsonObject } from 'geojson'
+import type { Feature, FeatureCollection, GeoJsonObject, Geometry } from 'geojson'
 import type { GeometryCollection, Topology } from 'topojson-specification'
 
 type ViewMode = 'year' | 'flow' | 'map'
 type DisplayMode = 'banners' | 'heatmap'
 type ThemeMode = 'system' | 'light' | 'dark'
+type PanelId = 'toolbar' | 'calendars' | 'stats' | 'agenda'
+type MapMode = 'route' | 'travel'
 
 const monthNames = new Intl.DateTimeFormat('ru-RU', { month: 'long' })
 const fullDate = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
 const weekDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']
 const THEME_KEY = 'digitable-planner-theme'
+const CITY_PREFERENCES_KEY = 'digitable-planner-city-preferences-v1'
+const PANEL_PREFERENCES_KEY = 'digitable-planner-panel-preferences-v1'
+const panelLabels: Record<PanelId, string> = {
+  toolbar: 'Управление годом',
+  calendars: 'Календари',
+  stats: 'Статистика',
+  agenda: 'Список мероприятий',
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag)
@@ -34,6 +46,15 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, t
 
 function download(name: string, content: string, type: string): void {
   const url = URL.createObjectURL(new Blob([content], { type }))
+  const anchor = el('a')
+  anchor.href = url
+  anchor.download = name
+  anchor.click()
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function downloadBlob(name: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob)
   const anchor = el('a')
   anchor.href = url
   anchor.download = name
@@ -69,10 +90,16 @@ export class PlannerApp {
   private settingsFeedback = ''
   private cleanView = false
   private map?: L.Map
+  private collapsedPanels = new Set<PanelId>()
+  private defaultCollapsedPanels = new Set<PanelId>()
+  private allowedCityIds = plannerCities.map(({ id }) => id)
+  private mapLevel: TravelLevel = 'world'
+  private mapMode: MapMode = 'route'
 
   constructor(private readonly root: HTMLElement, private readonly embedded = false) {}
 
   async start(): Promise<void> {
+    this.loadInterfacePreferences()
     if (!this.embedded) {
       try {
         const storedTheme = localStorage.getItem(THEME_KEY)
@@ -97,7 +124,7 @@ export class PlannerApp {
       document.documentElement.dataset.theme = theme
       if (this.viewMode === 'map') this.render()
     })
-    window.addEventListener('pagehide', () => requestCleanView(false))
+    if (this.embedded) window.addEventListener('pagehide', () => requestCleanView(false))
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault()
       this.installPrompt = event as typeof this.installPrompt
@@ -179,13 +206,26 @@ export class PlannerApp {
   }
 
   private renderPlanner(): HTMLElement {
-    const main = el('main', `workspace workspace--${this.viewMode}${this.cleanView ? ' workspace--clean' : ''}`)
+    const main = el('main', [
+      'workspace',
+      `workspace--${this.viewMode}`,
+      this.cleanView ? 'workspace--clean' : '',
+      this.collapsedPanels.has('toolbar') ? 'is-toolbar-collapsed' : '',
+      this.collapsedPanels.has('calendars') ? 'is-calendars-collapsed' : '',
+      this.collapsedPanels.has('agenda') ? 'is-agenda-collapsed' : '',
+    ].filter(Boolean).join(' '))
     main.id = 'planner'
     main.tabIndex = -1
     const showMenus = this.textButton(`${this.year} · Показать меню`, () => this.setCleanView(false), 'clean-view-exit')
     showMenus.setAttribute('aria-label', 'Показать меню планировщика')
+    const cleanViewBar = el('div', 'clean-view-bar')
+    cleanViewBar.append(showMenus)
     const toolbar = el('section', 'toolbar')
     toolbar.setAttribute('aria-label', 'Управление годом')
+    if (this.collapsedPanels.has('toolbar')) {
+      const summary = el('p', 'toolbar-summary', `${this.year} · ${this.viewMode === 'year' ? 'Год' : this.viewMode === 'flow' ? 'Лента' : 'Карта'} · ${this.scopeLabel()}`)
+      toolbar.append(summary, this.iconButton('⌄', 'Развернуть управление годом', () => this.togglePanel('toolbar')))
+    } else {
     const yearControl = el('div', 'year-control')
     yearControl.append(
       this.iconButton('←', 'Предыдущий год', () => { this.year -= 1; this.render() }),
@@ -216,8 +256,11 @@ export class PlannerApp {
     const hideMenus = this.textButton('Скрыть меню', () => this.setCleanView(true))
     hideMenus.classList.add('clean-view-enter')
     modes.append(hideMenus)
+    modes.append(this.textButton('Скачать PNG', () => void this.exportCurrentPng()))
     modes.append(this.textButton('+ Событие', () => this.openEventDialog(this.selectedDate ?? todayLocal())))
+    modes.append(this.iconButton('⌃', 'Свернуть управление годом', () => this.togglePanel('toolbar')))
     toolbar.append(yearControl, modes)
+    }
 
     const layout = el('div', `planner-layout${this.viewMode === 'map' ? ' planner-layout--map' : ''}`)
     layout.append(this.renderSidebar())
@@ -231,22 +274,60 @@ export class PlannerApp {
       for (const month of months) content.append(this.renderMonth(month))
     }
     layout.append(content, this.renderDayPanel())
-    main.append(showMenus, toolbar, layout)
+    main.append(cleanViewBar, toolbar, layout)
     return main
   }
 
   private setCleanView(enabled: boolean): void {
     this.cleanView = enabled
-    requestCleanView(enabled)
+    if (this.embedded) requestCleanView(enabled)
     this.render()
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(enabled ? '.clean-view-exit' : '.clean-view-enter')?.focus())
   }
 
+  private loadInterfacePreferences(): void {
+    try {
+      const cityPreferences = parseCityPreferences(localStorage.getItem(CITY_PREFERENCES_KEY))
+      this.allowedCityIds = cityPreferences.allowedCityIds
+      const storedPanels = JSON.parse(localStorage.getItem(PANEL_PREFERENCES_KEY) ?? '[]') as unknown
+      if (Array.isArray(storedPanels)) {
+        const valid = storedPanels.filter((value): value is PanelId => typeof value === 'string' && value in panelLabels)
+        this.defaultCollapsedPanels = new Set(valid)
+        this.collapsedPanels = new Set(valid)
+      }
+    } catch { /* optional local preferences use safe defaults */ }
+  }
+
+  private saveInterfacePreferences(): void {
+    try {
+      localStorage.setItem(CITY_PREFERENCES_KEY, serializeCityPreferences(this.allowedCityIds))
+      localStorage.setItem(PANEL_PREFERENCES_KEY, JSON.stringify([...this.defaultCollapsedPanels]))
+    } catch { /* optional local preferences must not block calendar use */ }
+  }
+
+  private togglePanel(panel: PanelId): void {
+    if (this.collapsedPanels.has(panel)) this.collapsedPanels.delete(panel)
+    else this.collapsedPanels.add(panel)
+    this.render()
+  }
+
   private renderSidebar(): HTMLElement {
     const aside = el('aside', 'calendars-panel')
+    if (this.collapsedPanels.has('calendars')) {
+      aside.classList.add('is-collapsed')
+      aside.append(
+        this.iconButton('›', 'Развернуть календари', () => this.togglePanel('calendars')),
+        el('span', 'collapsed-panel-label', 'Календари'),
+      )
+      return aside
+    }
     const title = el('div', 'panel-heading')
-    title.append(el('h2', '', 'Календари'), this.iconButton('+', 'Добавить календарь', () => this.openCalendarDialog()))
+    const actions = el('div', 'panel-heading__actions')
+    actions.append(this.iconButton('+', 'Добавить календарь', () => this.openCalendarDialog()))
+    actions.append(this.iconButton('‹', 'Свернуть календари', () => this.togglePanel('calendars')))
+    title.append(el('h2', '', 'Календари'), actions)
     aside.append(title)
+    const calendarList = el('div', 'calendar-list')
     for (const calendar of this.state.calendars) {
       const row = el('div', 'calendar-row')
       const toggle = el('label', 'calendar-toggle')
@@ -263,8 +344,9 @@ export class PlannerApp {
       edit.classList.add('calendar-edit')
       toggle.append(checkbox, dot, name)
       row.append(toggle, edit)
-      aside.append(row)
+      calendarList.append(row)
     }
+    aside.append(calendarList)
     const occurrences = this.visibleOccurrencesInScope()
     const occupiedDates = new Set<LocalDate>()
     const yearStart = localDate(this.year, 1, 1)
@@ -279,7 +361,9 @@ export class PlannerApp {
     }
     const stats = el('section', 'calendar-stats')
     stats.setAttribute('aria-label', 'Статистика выбранного периода')
-    stats.append(el('h3', '', 'В выбранном периоде'))
+    const statsHeading = el('div', 'subpanel-heading')
+    statsHeading.append(el('h3', '', 'В выбранном периоде'), this.iconButton(this.collapsedPanels.has('stats') ? '⌄' : '⌃', this.collapsedPanels.has('stats') ? 'Развернуть статистику' : 'Свернуть статистику', () => this.togglePanel('stats')))
+    stats.append(statsHeading)
     const statGrid = el('div', 'calendar-stats__grid')
     for (const [value, label] of [
       [occurrences.length, 'событий'],
@@ -291,7 +375,7 @@ export class PlannerApp {
       item.append(el('strong', '', String(value)), el('span', '', label))
       statGrid.append(item)
     }
-    stats.append(statGrid)
+    if (!this.collapsedPanels.has('stats')) stats.append(statGrid)
     const note = el('p', 'microcopy', 'Данные остаются в этом браузере. Сделайте резервную копию в разделе «Данные».')
     aside.append(stats, note)
     return aside
@@ -300,38 +384,62 @@ export class PlannerApp {
   private renderMap(): HTMLElement {
     const pane = el('section', 'city-map-pane')
     pane.setAttribute('aria-label', `Карта событий на ${this.year} год`)
-    const groups = cityEventGroups(this.state, this.year)
-      .map((group) => ({ ...group, occurrences: group.occurrences.filter((event) => this.occurrenceTouchesScope(event)) }))
-      .filter(({ occurrences }) => occurrences.length)
+    const itinerary = this.scopedItinerary(this.mapLevel)
+    const groups = [...new Map(itinerary.stops.map((stop) => [stop.city.id, {
+      city: stop.city,
+      occurrences: itinerary.stops.filter(({ city }) => city.id === stop.city.id).flatMap(({ occurrences }) => occurrences),
+    }])).values()]
     if (this.selectedCityId && !groups.some(({ city }) => city.id === this.selectedCityId)) this.selectedCityId = undefined
     const active = groups.find(({ city }) => city.id === this.selectedCityId) ?? groups[0]
 
     const heading = el('div', 'city-map-heading')
     const title = el('div')
-    title.append(el('p', 'eyebrow', 'Где и когда'), el('h2', '', 'Карта года'))
-    heading.append(title, el('p', 'microcopy', 'Интерактивная офлайн-карта: границы, масштаб и события загружены вместе с приложением. Геолокация и сетевые тайлы не используются.'))
+    title.append(el('p', 'eyebrow', this.mapMode === 'route' ? 'Откуда → куда' : 'Посещённые места'), el('h2', '', this.mapMode === 'route' ? 'Маршрут событий' : 'Карта путешествий'))
+    const controls = el('div', 'map-controls')
+    controls.append(
+      this.segmentButton('Маршрут', this.mapMode === 'route', () => { this.mapMode = 'route'; this.render() }),
+      this.segmentButton('Путешествия', this.mapMode === 'travel', () => { this.mapMode = 'travel'; this.render() }),
+      this.segmentButton('Мир', this.mapLevel === 'world', () => { this.mapLevel = 'world'; this.render() }),
+      this.segmentButton('Россия', this.mapLevel === 'russia', () => { this.mapLevel = 'russia'; this.render() }),
+      this.textButton('Скачать PNG', () => void this.exportMapPng()),
+    )
+    heading.append(title, controls)
 
     const frame = el('div', 'city-map-frame')
     frame.setAttribute('role', 'application')
-    frame.setAttribute('aria-label', 'Интерактивная карта городов с событиями')
-    requestAnimationFrame(() => this.initializeMap(frame, groups, active?.city.id))
+    frame.setAttribute('aria-label', this.mapMode === 'route' ? 'Интерактивная карта маршрута между событиями' : 'Интерактивная карта посещённых городов')
+    requestAnimationFrame(() => this.initializeMap(frame, itinerary.stops, active?.city.id))
 
     const timeline = el('div', 'city-timeline')
     if (!active) {
       timeline.append(el('h3', '', 'На карте пока пусто'), el('p', 'empty-state', 'Выберите город в событии — он появится здесь вместе с датой и календарём.'))
+    } else if (this.mapMode === 'travel') {
+      const summary = itinerary.summary
+      const activeHeading = el('div', 'city-timeline__heading')
+      activeHeading.append(el('h3', '', this.mapLevel === 'russia' ? 'Россия' : 'Мир'), el('span', 'status-badge status-badge--ready', `${summary.visitedCityCount} городов`))
+      timeline.append(activeHeading, el('p', 'microcopy', `${summary.visitedCountryCount} стран · ${summary.occurrenceCount} событий. Карта собрана только из городов, указанных в календаре.`))
+      for (const city of summary.visitedCities) {
+        const count = groups.find((group) => group.city.id === city.id)?.occurrences.length ?? 0
+        const chip = this.textButton(`${city.name} · ${count}`, () => { this.selectedCityId = city.id; this.mapMode = 'route'; this.render() }, 'travel-city-chip')
+        timeline.append(chip)
+      }
     } else {
       const activeHeading = el('div', 'city-timeline__heading')
-      activeHeading.append(el('h3', '', `${active.city.name}, ${active.city.country}`), el('span', 'status-badge status-badge--ready', `${active.occurrences.length} событий`))
-      timeline.append(activeHeading, el('p', 'microcopy', `Часовой пояс: ${active.city.timeZone}. Линия соединяет города по времени первого события, а не прокладывает маршрут.`))
-      for (const event of active.occurrences) {
-        const card = el('button', 'city-event-card')
+      activeHeading.append(el('h3', '', `${active.city.name}, ${active.city.country}`), el('span', 'status-badge status-badge--ready', `${itinerary.summary.stopCount} остановок`))
+      timeline.append(activeHeading)
+      if (!itinerary.legs.length) timeline.append(el('p', 'microcopy', 'Для последовательности нужны события хотя бы в двух разных городах.'))
+      for (const leg of itinerary.legs) {
+        const card = el('button', 'route-leg-card')
         card.type = 'button'
-        const calendar = this.state.calendars.find(({ id }) => id === event.calendarId)
-        card.style.setProperty('--event-color', calendar?.color ?? PALETTE[0])
-        card.append(el('time', '', `${event.startDate} · ${this.eventTimeLabel(event)}`), el('strong', '', event.title), el('span', '', calendar?.name ?? 'Календарь'))
+        card.append(
+          el('span', 'route-leg-number', String(leg.number)),
+          el('strong', '', `${leg.from.city.name} → ${leg.to.city.name}`),
+          el('time', '', `${leg.from.arrivalDate} → ${leg.to.arrivalDate}`),
+        )
         card.addEventListener('click', () => {
-          this.selectedDate = event.startDate
-          this.openEventDialog(event.startDate, event.id.split('::')[0])
+          this.selectedCityId = leg.to.city.id
+          this.selectedDate = leg.to.arrivalDate
+          this.render()
         })
         timeline.append(card)
       }
@@ -340,7 +448,7 @@ export class PlannerApp {
     return pane
   }
 
-  private initializeMap(frame: HTMLElement, groups: ReturnType<typeof cityEventGroups>, activeCityId?: string): void {
+  private initializeMap(frame: HTMLElement, stops: ItineraryStop[], activeCityId?: string): void {
     if (!frame.isConnected) return
     const map = L.map(frame, {
       zoomControl: true,
@@ -360,36 +468,51 @@ export class PlannerApp {
       style: { className: 'leaflet-country', color: lineColor, fillColor: landColor, weight: 1, fillOpacity: 1 },
     }).addTo(map)
 
-    if (groups.length > 1) {
-      L.polyline(groups.map(({ city }) => [city.latitude, city.longitude]), {
+    if (this.mapMode === 'route' && stops.length > 1) {
+      L.polyline(stops.map(({ city }) => [city.latitude, city.longitude]), {
         className: 'leaflet-chronology', color: accentColor, weight: 2.5, dashArray: '7 7', opacity: 0.7, interactive: false,
       }).addTo(map)
+      stops.slice(1).forEach((stop, index) => {
+        const from = stops[index]
+        const latitude = (from.city.latitude + stop.city.latitude) / 2
+        const longitude = (from.city.longitude + stop.city.longitude) / 2
+        L.marker([latitude, longitude], {
+          interactive: false,
+          icon: L.divIcon({ className: 'leaflet-route-label-wrap', html: `<span class="leaflet-route-label">${from.number}→${stop.number}</span>`, iconSize: [44, 22], iconAnchor: [22, 11] }),
+        }).addTo(map)
+      })
     }
     const bounds = L.latLngBounds([])
-    for (const group of groups) {
+    const cities = [...new Map(stops.map((stop) => [stop.city.id, {
+      city: stop.city,
+      numbers: stops.filter(({ city }) => city.id === stop.city.id).map(({ number }) => number),
+      count: stops.filter(({ city }) => city.id === stop.city.id).reduce((total, item) => total + item.occurrences.length, 0),
+    }])).values()]
+    for (const group of cities) {
       const active = activeCityId === group.city.id
       const icon = L.divIcon({
         className: 'leaflet-city-icon-wrap',
-        html: `<span class="leaflet-city-icon${active ? ' is-active' : ''}">${group.occurrences.length}</span>`,
+        html: `<span class="leaflet-city-icon${active ? ' is-active' : ''}">${this.mapMode === 'route' ? group.numbers.join('·') : group.count}</span>`,
         iconSize: [30, 30],
         iconAnchor: [15, 15],
       })
       const marker = L.marker([group.city.latitude, group.city.longitude], {
         icon,
         keyboard: true,
-        title: `${group.city.name}: ${group.occurrences.length} событий`,
+        title: `${group.city.name}: ${group.count} событий`,
         alt: group.city.name,
       }).addTo(map)
       marker.bindTooltip(group.city.name, { direction: 'top', offset: [0, -13], opacity: 1 })
       marker.on('click', () => {
         this.selectedCityId = group.city.id
-        this.selectedDate = group.occurrences[0].startDate
+        this.selectedDate = stops.find(({ city }) => city.id === group.city.id)?.arrivalDate
         this.render()
       })
       bounds.extend([group.city.latitude, group.city.longitude])
     }
-    if (groups.length === 1) map.setView(bounds.getCenter(), 4)
-    else if (groups.length > 1) map.fitBounds(bounds, { padding: [45, 45], maxZoom: 5 })
+    if (cities.length === 1) map.setView(bounds.getCenter(), this.mapLevel === 'russia' ? 5 : 4)
+    else if (cities.length > 1) map.fitBounds(bounds, { padding: [45, 45], maxZoom: this.mapLevel === 'russia' ? 5 : 4 })
+    else if (this.mapLevel === 'russia') map.setView([61, 96], 3)
     map.attributionControl.setPrefix(false)
     map.attributionControl.addAttribution('Границы: Natural Earth · world-atlas')
   }
@@ -440,7 +563,8 @@ export class PlannerApp {
         cell.append(heat)
       }
     } else {
-      for (const event of events.slice(0, 3)) {
+      const visibleEventCount = this.viewMode === 'flow' ? 1 : 3
+      for (const event of events.slice(0, visibleEventCount)) {
         const calendar = this.state.calendars.find(({ id }) => id === event.calendarId)
         const eventButton = el('button', 'event-chip', `${event.allDay ? '' : `${event.startTime} `}${event.startDate < date ? '← ' : ''}${event.title}${event.endDateExclusive > addDays(date, 1) ? ' →' : ''}`)
         eventButton.type = 'button'
@@ -449,7 +573,7 @@ export class PlannerApp {
         eventButton.addEventListener('click', () => this.openEventDialog(date, event.id.split('::')[0]))
         cell.append(eventButton)
       }
-      if (events.length > 3) cell.append(el('span', 'more-events', `+${events.length - 3}`))
+      if (events.length > visibleEventCount) cell.append(el('span', 'more-events', `+${events.length - visibleEventCount}`))
     }
     return cell
   }
@@ -465,6 +589,12 @@ export class PlannerApp {
 
   private renderDayPanel(): HTMLElement {
     const aside = el('aside', 'day-panel')
+    if (this.collapsedPanels.has('agenda')) {
+      aside.classList.add('is-collapsed')
+      const expand = this.iconButton('‹', 'Развернуть список мероприятий', () => this.togglePanel('agenda'))
+      aside.append(expand, el('span', 'collapsed-panel-label', 'Мероприятия'))
+      return aside
+    }
     const heading = el('div', 'panel-heading')
     const headingText = el('div')
     const controls = el('div', 'panel-heading__actions')
@@ -479,6 +609,7 @@ export class PlannerApp {
       controls.append(this.iconButton('+', 'Добавить событие', () => this.openEventDialog(todayLocal())))
       events = this.visibleOccurrencesInScope()
     }
+    controls.append(this.iconButton('›', 'Свернуть список мероприятий', () => this.togglePanel('agenda')))
     heading.append(headingText, controls)
     aside.append(heading)
     if (!events.length) aside.append(el('p', 'empty-state', this.selectedDate ? 'Пока свободно. Двойной щелчок по дню тоже создаёт событие.' : 'В выбранном периоде пока нет мероприятий.'))
@@ -515,6 +646,82 @@ export class PlannerApp {
       .sort((a, b) => a.startDate.localeCompare(b.startDate)
         || (a.allDay ? '' : a.startTime ?? '').localeCompare(b.allDay ? '' : b.startTime ?? '')
         || a.title.localeCompare(b.title, 'ru'))
+  }
+
+  private scopedItinerary(level: TravelLevel) {
+    const scopedEvents = this.visibleOccurrencesInScope().map((event) => ({ ...event, recurrence: undefined }))
+    return deriveItinerary({ ...this.state, events: scopedEvents }, this.year, level)
+  }
+
+  private exportPalette(): ExportPalette {
+    const theme = getComputedStyle(document.documentElement)
+    return {
+      background: theme.getPropertyValue('--paper').trim(),
+      surface: theme.getPropertyValue('--surface').trim(),
+      surfaceAlt: theme.getPropertyValue('--paper-2').trim(),
+      text: theme.getPropertyValue('--ink').trim(),
+      muted: theme.getPropertyValue('--muted').trim(),
+      line: theme.getPropertyValue('--line-strong').trim(),
+      accent: theme.getPropertyValue('--accent').trim(),
+    }
+  }
+
+  private async exportCurrentPng(): Promise<void> {
+    if (this.viewMode === 'map') await this.exportMapPng()
+    else await this.exportCalendarPng()
+  }
+
+  private async exportCalendarPng(): Promise<void> {
+    try {
+      const visibleCalendars = new Map(this.state.calendars.filter(({ visible }) => visible).map((calendar) => [calendar.id, calendar]))
+      const events = this.visibleOccurrencesInScope().flatMap((event) => {
+        const calendar = visibleCalendars.get(event.calendarId)
+        if (!calendar) return []
+        const result: { date: string; title: string; color: string; time?: string }[] = []
+        let date = event.startDate
+        while (date < event.endDateExclusive) {
+          if (this.dateIsActive(date) && date.startsWith(`${this.year}-`)) result.push({
+            date,
+            title: event.title,
+            color: calendar.color,
+            ...(!event.allDay && event.startTime ? { time: event.startTime } : {}),
+          })
+          date = addDays(date, 1)
+        }
+        return result
+      })
+      const blob = await renderCalendarPng({ year: this.year, monthIndexes: this.activeMonths(), events, palette: this.exportPalette() })
+      downloadBlob(`digitable-planner-${this.year}.png`, blob)
+      this.settingsFeedback = 'Календарь PNG создан локально.'
+    } catch (error) {
+      this.settingsFeedback = error instanceof Error ? error.message : String(error)
+    }
+  }
+
+  private async exportMapPng(): Promise<void> {
+    try {
+      const itinerary = this.scopedItinerary(this.mapLevel)
+      const topology = countriesTopology as unknown as Topology<{ countries: GeometryCollection }>
+      const countryGeometry = feature(topology, topology.objects.countries) as FeatureCollection | Feature | Geometry
+      const blob = await renderRoutePng({
+        year: this.year,
+        level: this.mapLevel,
+        stops: itinerary.stops.map((stop) => ({
+          number: stop.number,
+          latitude: stop.city.latitude,
+          longitude: stop.city.longitude,
+          city: stop.city.name,
+          country: stop.city.country,
+          date: stop.arrivalDate,
+        })),
+        palette: this.exportPalette(),
+        countryGeometry,
+      })
+      downloadBlob(`digitable-travel-map-${this.mapLevel}-${this.year}.png`, blob)
+      this.settingsFeedback = 'Карта PNG создана локально.'
+    } catch (error) {
+      this.settingsFeedback = error instanceof Error ? error.message : String(error)
+    }
   }
 
   private occurrenceTouchesScope(event: PlannerEvent): boolean {
@@ -657,7 +864,7 @@ export class PlannerApp {
       hero.append(feedback)
     }
     const grid = el('div', 'settings-grid')
-    grid.append(this.renderBackupCard(), this.renderIcsCard(), this.renderProviderCard(), this.renderAppCard())
+    grid.append(this.renderInterfaceCard(), this.renderExportCard(), this.renderBackupCard(), this.renderIcsCard(), this.renderProviderCard(), this.renderAppCard())
     hero.append(grid)
     dialog.append(hero)
     return dialog
@@ -672,6 +879,75 @@ export class PlannerApp {
   private closeSettingsDialog(): void {
     this.settingsOpen = false
     document.querySelector<HTMLDialogElement>('#settings-dialog')?.close()
+  }
+
+  private renderInterfaceCard(): HTMLElement {
+    const card = this.settingsCard('Интерфейс и города', 'Настройте исходное состояние панелей и компактный список городов для новых событий.')
+    const panels = el('fieldset', 'preference-fieldset')
+    panels.append(el('legend', '', 'Сворачивать по умолчанию'))
+    for (const panel of Object.keys(panelLabels) as PanelId[]) {
+      const label = el('label', 'preference-choice')
+      const checkbox = el('input')
+      checkbox.type = 'checkbox'
+      checkbox.checked = this.defaultCollapsedPanels.has(panel)
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) this.defaultCollapsedPanels.add(panel)
+        else this.defaultCollapsedPanels.delete(panel)
+        this.saveInterfacePreferences()
+      })
+      label.append(checkbox, el('span', '', panelLabels[panel]))
+      panels.append(label)
+    }
+    const cityHeading = el('div', 'settings-inline-heading')
+    cityHeading.append(el('strong', '', `Города в пикере · ${this.allowedCityIds.length}`))
+    const allCities = this.textButton('Все', () => {
+      this.allowedCityIds = plannerCities.map(({ id }) => id)
+      this.saveInterfacePreferences()
+      this.render()
+    }, 'secondary-button')
+    const russia = this.textButton('Россия', () => {
+      this.allowedCityIds = plannerCities.filter(({ country }) => country === 'Россия').map(({ id }) => id)
+      this.saveInterfacePreferences()
+      this.render()
+    }, 'secondary-button')
+    cityHeading.append(allCities, russia)
+    const search = el('input', 'city-search')
+    search.type = 'search'
+    search.placeholder = 'Найти город или страну'
+    search.setAttribute('aria-label', 'Фильтр городов')
+    const cityList = el('div', 'city-preferences-list')
+    const selected = new Set(this.allowedCityIds)
+    const renderChoices = (query = '') => {
+      const normalized = query.trim().toLocaleLowerCase('ru')
+      cityList.replaceChildren()
+      const matches = plannerCities.filter(({ name, country }) => !normalized || `${name} ${country}`.toLocaleLowerCase('ru').includes(normalized))
+      for (const city of matches) {
+        const label = el('label', 'city-preference-choice')
+        const checkbox = el('input')
+        checkbox.type = 'checkbox'
+        checkbox.checked = selected.has(city.id)
+        checkbox.addEventListener('change', () => {
+          if (checkbox.checked) selected.add(city.id)
+          else selected.delete(city.id)
+          this.allowedCityIds = plannerCities.flatMap(({ id }) => selected.has(id) ? [id] : [])
+          this.saveInterfacePreferences()
+        })
+        label.append(checkbox, el('span', '', city.name), el('small', '', city.country))
+        cityList.append(label)
+      }
+    }
+    search.addEventListener('input', () => renderChoices(search.value))
+    renderChoices()
+    card.append(panels, cityHeading, search, cityList, el('p', 'microcopy', 'Города, уже использованные в событиях, всегда остаются доступны и поднимаются вверх по частоте.'))
+    return card
+  }
+
+  private renderExportCard(): HTMLElement {
+    const card = this.settingsCard('PNG и печать', 'Сохраните год или карту путешествий локально, без загрузки снимка на сервер.')
+    card.append(this.textButton('Скачать календарь PNG', () => void this.exportCalendarPng()))
+    card.append(this.textButton('Скачать карту года PNG', () => void this.exportMapPng()))
+    card.append(el('p', 'microcopy', 'PNG строится в браузере из видимых календарей и выбранного периода. Светлая или тёмная палитра сохраняется.'))
+    return card
   }
 
   private renderBackupCard(): HTMLElement {
@@ -862,12 +1138,16 @@ export class PlannerApp {
     const noCity = el('option', '', 'Без города')
     noCity.value = ''
     citySelect.append(noCity)
-    const countryOrder = ['Россия', ...new Set(plannerCities.filter(({ country }) => country !== 'Россия').map(({ country }) => country))]
-    for (const country of countryOrder) {
+    const rankedCities = rankSelectableCities({
+      allowedCityIds: this.allowedCityIds,
+      eventCityIds: this.state.events.map(({ cityId }) => cityId),
+      selectedCityId: existing?.cityId,
+    })
+    for (const cityGroup of groupRankedCities(rankedCities)) {
       const group = el('optgroup')
-      group.label = country
-      for (const city of [...plannerCities.filter((item) => item.country === country)].sort((a, b) => a.name.localeCompare(b.name, 'ru'))) {
-        const option = el('option', '', city.name)
+      group.label = cityGroup.kind === 'used' ? 'Частые города' : cityGroup.label
+      for (const { city, usageCount } of cityGroup.cities) {
+        const option = el('option', '', cityGroup.kind === 'used' ? `${city.name} · ${usageCount}` : city.name)
         option.value = city.id
         option.selected = city.id === existing?.cityId
         group.append(option)
@@ -1043,6 +1323,12 @@ export class PlannerApp {
   private textButton(text: string, action: () => void | Promise<void>, className = 'text-button'): HTMLButtonElement {
     const button = el('button', className, text)
     button.type = 'button'; button.addEventListener('click', () => void action())
+    return button
+  }
+
+  private segmentButton(text: string, active: boolean, action: () => void): HTMLButtonElement {
+    const button = this.textButton(text, action, `segment-button${active ? ' is-active' : ''}`)
+    button.setAttribute('aria-pressed', String(active))
     return button
   }
 

@@ -5,6 +5,7 @@ import { providerCapabilities } from '../src/sync/provider'
 const serviceWorker = readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8')
 const citySource = readFileSync(new URL('../src/data/cities.ts', import.meta.url), 'utf8')
 const plannerSource = readFileSync(new URL('../src/planner-app.ts', import.meta.url), 'utf8')
+const pngSource = readFileSync(new URL('../src/export/png.ts', import.meta.url), 'utf8')
 
 describe('first-slice falsifiers', () => {
   it('does not market provider sync as supported', () => {
@@ -13,7 +14,7 @@ describe('first-slice falsifiers', () => {
   })
 
   it('runtime cache is an explicit shell allowlist, excluding user and provider data', () => {
-    expect(serviceWorker).toContain("'digitable-planner-shell-v9'")
+    expect(serviceWorker).toContain("'digitable-planner-shell-v10'")
     expect(serviceWorker).toContain("request.mode === 'navigate'")
     expect(serviceWorker).toContain("fetch(request).then")
     expect(serviceWorker).toContain("caches.match('/index.html')")
@@ -29,7 +30,7 @@ describe('first-slice falsifiers', () => {
   })
 
   it('keeps the map local and free of tile, geolocation, and calendar payload channels', () => {
-    const mapSources = `${citySource}\n${plannerSource}`
+    const mapSources = `${citySource}\n${plannerSource}\n${pngSource}`
     expect(mapSources).not.toMatch(/mapbox|openstreetmap|googleapis|tileLayer|fetch\(/i)
     expect(mapSources).toContain("from 'leaflet'")
     expect(mapSources).toContain("world-atlas/countries-110m.json")

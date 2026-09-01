@@ -10,7 +10,8 @@ npm run test:a11y
 npm run test:falsifiers
 ```
 
-`npm run check` type-checks, runs the domain/data/storage/city-map/accessibility/cache
+`npm run check` type-checks, runs the domain/data/storage/city-map/city-preference/
+itinerary/accessibility/cache
 contracts, creates `dist/`, and checks the built artifact. `test:e2e` is an
 artifact-level offline-shell smoke test in this milestone; cross-browser
 Playwright and automated WCAG audits remain a later rollout gate.
@@ -23,8 +24,18 @@ Manual browser evidence recorded on 2026-09-01 against the local release candida
   persisted in a fresh tab, and the classic view measured 252 × 246 px per month;
 - the compact flow used 1001 × 164 px bounded month cards in a 754 px internal
   scroll area, with explicit day and stronger weekend borders and no document overflow;
+- the follow-up flow layout keeps one bordered event banner visible per occupied
+  day and reports additional events with `+N`, while clean-view restore controls
+  occupy their own 40 px row instead of overlapping January/February;
 - the offline Leaflet map rendered 177 bundled country paths and event markers,
   with zero tile elements and Natural Earth attribution;
+- the itinerary view rendered numbered stops and an explicit `Berlin → Иваново`
+  leg; the travel view switched independently between world and Russia scopes;
+- city settings exposed all 106 offline cities with filter/presets; the event picker
+  placed used cities first and retained Иваново/Чебоксары in the Russian group;
+- toolbar, calendar, statistics and agenda panels collapse independently; collapsing
+  both side panels expands the map without horizontal overflow;
+- calendar and travel-map PNG actions completed through the local Canvas path;
 - a custom January+March scope rendered exactly two cards in two columns;
   future-only on 2026-09-01 rendered September through December;
 - an event at 09:30–11:00 in Иваново appeared with its time in the all-events

@@ -130,4 +130,27 @@ describe('accessibility contract', () => {
     expect(css).toContain('.months--flow .day.is-weekend')
     expect(main.indexOf("leaflet/dist/leaflet.css")).toBeLessThan(main.indexOf("./styles.css"))
   })
+
+  it('keeps interface preferences, route sequence, travel map and local PNG export discoverable', () => {
+    expect(source).toContain("type PanelId = 'toolbar' | 'calendars' | 'stats' | 'agenda'")
+    expect(source).toContain("localStorage.setItem(PANEL_PREFERENCES_KEY")
+    expect(source).toContain("groupRankedCities(rankedCities)")
+    expect(source).toContain("group.label = cityGroup.kind === 'used' ? 'Частые города'")
+    expect(source).toContain("'Карта путешествий'")
+    expect(source).toContain('`${leg.from.city.name} → ${leg.to.city.name}`')
+    expect(source).toContain("this.textButton('Скачать PNG'")
+    expect(source).toContain('renderCalendarPng({')
+    expect(source).toContain('renderRoutePng({')
+    expect(css).toContain('.leaflet-route-label')
+    expect(css).toContain('.route-leg-card')
+  })
+
+  it('keeps clean-view restore controls in layout flow and compact flow events visible', () => {
+    expect(source).toContain("el('div', 'clean-view-bar')")
+    expect(css).toContain('.workspace--clean .clean-view-bar')
+    expect(css).not.toContain('position: fixed;\n  z-index: 30;\n  top: 10px')
+    expect(source).toContain("const visibleEventCount = this.viewMode === 'flow' ? 1 : 3")
+    expect(css).toContain('.months--flow .event-chip')
+    expect(css).toContain('.months--flow .day-number')
+  })
 })
