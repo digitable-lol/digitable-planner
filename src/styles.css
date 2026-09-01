@@ -21,6 +21,7 @@
   --ink: var(--course-text);
   --muted: var(--course-muted);
   --line: var(--course-line);
+  --line-strong: var(--course-line-strong);
   --surface: var(--course-surface);
   --accent: var(--course-cyan);
   --accent-dark: var(--course-cyan);
@@ -85,7 +86,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .notice { margin: 16px 24px 0; padding: 12px 16px; border-radius: 10px; }
 .notice--danger { background: color-mix(in srgb, #ff7d86 12%, var(--surface)); color: var(--ink); border: 1px solid #ff7d86; }
 .workspace { width: 100%; max-width: none; margin: 0 auto; padding: 12px 20px 14px; }
-.workspace--year, .workspace--map { height: calc(100dvh - 64px); display: flex; flex-direction: column; overflow: hidden; }
+.workspace--year, .workspace--flow, .workspace--map { height: calc(100dvh - 64px); display: flex; flex-direction: column; overflow: hidden; }
 .toolbar { min-height: 40px; flex: 0 0 auto; display: flex; justify-content: space-between; gap: 20px; align-items: center; margin-bottom: 10px; }
 .year-control, .mode-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .year-title { margin: 0 5px; font: 500 clamp(30px, 4vw, 46px)/1 Georgia, serif; letter-spacing: -.04em; }
@@ -105,8 +106,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .planner-layout { min-height: 0; flex: 1 1 auto; display: grid; grid-template-columns: 170px minmax(0, 1fr) 180px; gap: 10px; align-items: stretch; }
 .calendars-panel, .day-panel { position: sticky; top: 88px; }
 .workspace--year .calendars-panel, .workspace--year .day-panel,
+.workspace--flow .calendars-panel, .workspace--flow .day-panel,
 .workspace--map .calendars-panel, .workspace--map .day-panel { position: static; min-height: 0; overflow: auto; }
 .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 13px; }
+.panel-heading__actions { display: flex; gap: 4px; }
 .panel-heading h2 { margin: 3px 0 0; font: 500 18px/1.2 Georgia, serif; }
 .calendar-row { display: flex; align-items: center; gap: 3px; padding: 4px 0; font-size: 14px; }
 .calendar-toggle { min-width: 0; flex: 1 1 auto; display: grid; grid-template-columns: 18px 10px minmax(0, 1fr); gap: 7px; align-items: center; padding: 4px 2px; }
@@ -116,6 +119,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .calendar-edit { flex: 0 0 auto; min-width: 28px; min-height: 28px; padding: 1px 4px 5px; border-color: transparent; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; }
 .calendar-row:hover .calendar-edit, .calendar-edit:focus-visible { color: var(--ink); border-color: var(--line); }
 .microcopy { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.calendar-stats { margin-top: 16px; padding-top: 13px; border-top: 1px solid var(--line); }
+.calendar-stats h3 { margin: 0 0 9px; font-size: 11px; font-weight: 700; color: var(--muted); }
+.calendar-stats__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.calendar-stat { min-width: 0; padding: 7px; border: 1px solid var(--line); border-radius: var(--course-radius); background: var(--surface); }
+.calendar-stat strong, .calendar-stat span { display: block; }
+.calendar-stat strong { font: 650 16px/1 var(--course-mono); color: var(--accent); }
+.calendar-stat span { margin-top: 3px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; }
 
 .clean-view-exit { display: none; }
 .workspace--clean { height: 100dvh; padding: 6px; }
@@ -141,15 +151,23 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 .months { display: grid; gap: 8px; min-width: 0; min-height: 0; }
 .months--year { height: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); overflow: hidden; }
-.months--flow { grid-template-columns: 1fr; }
-.months--flow .month-card { display: grid; grid-template-columns: 130px 1fr; gap: 12px; align-items: start; }
-.months--flow .month-grid { min-height: 116px; }
+.months--year.months--filtered { grid-template-columns: repeat(var(--month-columns), minmax(220px, 1fr)); grid-template-rows: repeat(3, clamp(215px, 24vh, 250px)); align-content: start; overflow: auto; }
+.months--flow { width: min(100%, 1040px); margin: 0 auto; padding: 1px 7px 14px; grid-template-columns: 1fr; align-content: start; overflow: auto; }
+.months--flow .month-card { min-height: 164px; display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: start; border-color: var(--line-strong); border-radius: 10px; box-shadow: 0 5px 18px color-mix(in srgb, #000 10%, transparent); }
+.months--flow .month-title { padding-top: 4px; font-size: 16px; }
+.months--flow .month-grid { min-height: 138px; grid-template-rows: 15px repeat(6, 19px); gap: 3px; }
+.months--flow .day { border: 1px solid color-mix(in srgb, var(--line) 72%, transparent); border-radius: 4px; background: color-mix(in srgb, var(--paper) 35%, transparent); }
+.months--flow .day.is-weekend { border-color: var(--line-strong); background: var(--paper-2); }
+.months--flow .day--empty { border-color: transparent; background: transparent; }
+.period-empty { align-self: start; margin: 24px auto; max-width: 520px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: var(--surface); text-align: center; }
 .month-card { min-width: 0; min-height: 0; padding: 9px; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 13px; }
 .month-title { margin: 0 0 4px; flex: 0 0 auto; text-transform: capitalize; font: 500 14px/1.2 Georgia, serif; }
 .month-grid { min-height: 0; flex: 1 1 auto; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: 12px repeat(6, minmax(0, 1fr)); gap: 1px 2px; }
 .weekday { color: var(--muted); text-align: center; font-size: 8px; font-weight: 700; padding-bottom: 2px; }
 .day { position: relative; min-width: 0; min-height: 0; border-radius: 6px; padding: 1px; overflow: hidden; }
 .day--empty { background: color-mix(in srgb, var(--paper-2) 45%, transparent); }
+.day--outside-scope { opacity: .22; }
+.day--outside-scope .day-number { cursor: default; }
 .day.is-weekend { background: color-mix(in srgb, var(--paper-2) 65%, transparent); }
 .day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
 .day-number { position: relative; z-index: 2; display: grid; place-items: center; width: 18px; height: 18px; padding: 0; border: 0; background: transparent; font-size: 8px; }
@@ -159,27 +177,29 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .heat { position: absolute; inset: 4px; border-radius: 5px; background: var(--accent); z-index: 0; }
 .heat + .day-number { color: white; }
 
-.day-panel { border-left: 1px solid var(--line); padding-left: 16px; min-height: 250px; }
+.day-panel { border-left: 1px solid var(--line); padding-left: 16px; min-height: 250px; overflow: auto; }
 .eyebrow { color: var(--accent-dark); text-transform: uppercase; letter-spacing: .09em; font-size: 10px; font-weight: 800; margin: 0 0 5px; }
 .empty-state { color: var(--muted); font-size: 13px; line-height: 1.5; }
 .agenda-card { width: 100%; border: 0; border-left: 4px solid var(--event-color); background: var(--surface); display: flex; flex-direction: column; gap: 3px; padding: 10px; margin-bottom: 7px; text-align: left; }
 .agenda-card span { color: var(--muted); font-size: 11px; }
+.agenda-card__date { color: var(--accent); font: 650 9px var(--course-mono); text-transform: uppercase; }
 
 .city-map-pane { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(260px, 1fr) auto; gap: 10px; }
 .city-map-heading { display: grid; grid-template-columns: auto minmax(240px, 480px); justify-content: space-between; gap: 18px; align-items: end; }
 .city-map-heading h2 { margin: 0; font: 500 23px/1.1 Georgia, serif; }
 .city-map-heading .microcopy { margin: 0; text-align: right; }
-.city-map-frame { position: relative; min-height: 260px; overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
-.city-map-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-.map-grid-line { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 7; }
-.map-land { fill: var(--paper-2); stroke: var(--line-strong); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.map-route { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 7 7; opacity: .6; vector-effect: non-scaling-stroke; }
-.city-marker { --map-x: 50%; --map-y: 50%; position: absolute; left: var(--map-x); top: var(--map-y); z-index: 2; display: flex; align-items: center; gap: 5px; padding: 0; border: 0; background: transparent; transform: translate(-11px, -11px); text-align: left; }
-.city-marker__dot { display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border: 2px solid var(--surface); border-radius: 999px; background: var(--accent); color: var(--course-on-accent); font: 750 9px var(--course-mono); box-shadow: 0 3px 14px #0008; }
-.city-marker__label { max-width: 92px; overflow: hidden; text-overflow: ellipsis; padding: 3px 5px; border-radius: 5px; background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--ink); font-size: 9px; white-space: nowrap; }
-.city-marker:hover .city-marker__label, .city-marker.is-active .city-marker__label { color: var(--accent); }
-.city-marker:focus-visible { outline: 3px solid var(--focus); outline-offset: 5px; }
-.city-marker.is-active .city-marker__dot { outline: 3px solid var(--focus); outline-offset: 2px; }
+.city-map-frame { position: relative; min-height: 260px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 10px; background: color-mix(in srgb, var(--surface) 88%, var(--paper-2)); isolation: isolate; }
+.city-map-frame.leaflet-container { background: color-mix(in srgb, var(--paper-2) 36%, var(--surface)); font-family: inherit; }
+.city-map-frame .leaflet-control-zoom a { border-color: var(--line); background: var(--surface); color: var(--ink); }
+.city-map-frame .leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 88%, transparent); color: var(--muted); font-size: 9px; }
+.city-map-frame .leaflet-control-attribution a { color: var(--accent); }
+.leaflet-country { fill: var(--paper-2); stroke: var(--line-strong); }
+.leaflet-chronology { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-dasharray: 7 7; opacity: .7; }
+.leaflet-city-icon-wrap { border: 0; background: transparent; }
+.leaflet-city-icon { display: grid; place-items: center; width: 30px; height: 30px; border: 3px solid var(--surface); border-radius: 50%; background: var(--accent); color: var(--course-on-accent); font: 750 10px var(--course-mono); box-shadow: 0 4px 18px #0008; }
+.leaflet-city-icon.is-active { outline: 3px solid var(--focus); outline-offset: 2px; }
+.leaflet-tooltip { border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); box-shadow: 0 4px 16px #0006; font-size: 11px; }
+.leaflet-tooltip-top::before { border-top-color: var(--line-strong); }
 .city-timeline { min-height: 86px; max-height: 155px; overflow: auto; display: flex; gap: 7px; align-items: stretch; padding: 9px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
 .city-timeline > h3, .city-timeline > p { margin: auto 8px; }
 .city-timeline__heading { min-width: 170px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 8px; padding: 4px 8px; border-right: 1px solid var(--line); }
@@ -213,6 +233,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .settings-dialog .settings-hero { padding: 22px; }
 .settings-dialog .settings-hero .dialog-heading h2 { margin: 3px 0 0; font: 500 30px/1.05 Georgia, serif; }
 .settings-dialog .lede { margin: 12px 0 0; font-size: 14px; }
+.settings-feedback { margin: 14px 0 0; border: 1px solid var(--line); background: var(--paper-2); color: var(--ink); }
 .settings-dialog .settings-grid { margin-top: 20px; }
 .settings-dialog .settings-card { min-height: 0; padding: 16px; }
 .settings-dialog .settings-card h2 { font-size: 19px; }
@@ -225,6 +246,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .field textarea { min-height: 90px; resize: vertical; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.danger-button--filled { margin-right: 0; border-color: #ff7d86; background: #ff7d86; color: #17080a; font-weight: 700; }
+.confirmation-copy { margin: 0; color: var(--muted); line-height: 1.55; }
+.month-choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 0; padding: 0; border: 0; }
+.month-choices legend { grid-column: 1 / -1; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+.month-choice { display: flex; align-items: center; gap: 7px; padding: 9px; border: 1px solid var(--line); border-radius: var(--course-radius); background: var(--paper); font-size: 12px; text-transform: capitalize; }
+.month-choice:has(input:checked) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
+.month-choice input { accent-color: var(--accent); }
+.field-error { min-height: 18px; margin: -5px 0 0; color: #ff7d86; font-size: 12px; }
+.time-toggle { display: flex; align-items: center; gap: 9px; padding: 10px; border: 1px solid var(--line); border-radius: var(--course-radius); background: var(--paper); font-size: 13px; }
+.time-toggle input { width: 17px; height: 17px; accent-color: var(--accent); }
 .color-field { border: 0; padding: 0; margin: 0; display: flex; gap: 10px; }
 .color-field legend { font-size: 13px; margin-bottom: 8px; }
 .color-choice input { position: absolute; opacity: 0; }
@@ -237,6 +268,7 @@ html[data-embed="true"] .workspace {
   padding: 10px 12px 12px;
 }
 html[data-embed="true"] .workspace--year,
+html[data-embed="true"] .workspace--flow,
 html[data-embed="true"] .workspace--map { height: 100dvh; }
 html[data-embed="true"] .toolbar { min-height: 36px; margin-bottom: 8px; }
 html[data-embed="true"] .year-title { font-size: clamp(28px, 3vw, 40px); }
@@ -246,7 +278,7 @@ html[data-embed="true"] .compact-field select { min-height: 34px; }
 html[data-embed="true"] .calendars-panel .microcopy { display: none; }
 
 @media (max-width: 1180px) {
-  .workspace--year, .workspace--map { height: auto; min-height: calc(100dvh - 64px); overflow: visible; }
+  .workspace--year, .workspace--flow, .workspace--map { height: auto; min-height: calc(100dvh - 64px); overflow: visible; }
   .planner-layout { grid-template-columns: 150px 1fr; }
   .day-panel { grid-column: 2; position: static; border: 0; padding: 18px 0; }
   .months--year { height: auto; grid-template-columns: repeat(2, minmax(220px, 1fr)); grid-template-rows: none; overflow: visible; }
@@ -259,10 +291,12 @@ html[data-embed="true"] .calendars-panel .microcopy { display: none; }
    two-column document between 1020 and 1180 px. */
 @media (min-width: 1020px) and (max-width: 1180px) {
   html[data-embed="true"] .workspace--year,
+  html[data-embed="true"] .workspace--flow,
   html[data-embed="true"] .workspace--map { height: 100dvh; min-height: 0; overflow: hidden; }
   html[data-embed="true"] .planner-layout { grid-template-columns: 152px minmax(0, 1fr) 156px; gap: 8px; }
   html[data-embed="true"] .day-panel { grid-column: auto; min-height: 0; padding: 0 0 0 12px; border-left: 1px solid var(--line); overflow: auto; }
   html[data-embed="true"] .months--year { height: 100%; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); overflow: hidden; }
+  html[data-embed="true"] .months--year.months--filtered { grid-template-columns: repeat(var(--month-columns), minmax(0, 1fr)); grid-template-rows: repeat(3, clamp(215px, 24vh, 250px)); align-content: start; overflow: auto; }
   html[data-embed="true"] .month-card { min-height: 0; padding: 7px; }
 }
 
@@ -283,6 +317,11 @@ html[data-embed="true"] .workspace--clean .planner-layout {
   }
   html[data-embed="true"] .workspace--clean .months--year {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: repeat(3, clamp(210px, 23vw, 250px));
+  }
+  html[data-embed="true"] .months--year.months--filtered,
+  html[data-embed="true"] .workspace--clean .months--year.months--filtered {
+    grid-template-columns: repeat(var(--month-columns), minmax(0, 1fr));
     grid-template-rows: repeat(3, clamp(210px, 23vw, 250px));
   }
 }
@@ -315,6 +354,7 @@ html[data-embed="true"] .workspace--clean .planner-layout {
   .settings-dialog .settings-hero { padding: 16px; }
   .settings-dialog .settings-grid { margin-top: 16px; }
   html[data-embed="true"] .workspace--year,
+  html[data-embed="true"] .workspace--flow,
   html[data-embed="true"] .workspace--map { height: auto; min-height: 100dvh; overflow: visible; }
   .workspace--clean { min-height: 100dvh; height: auto; padding: 4px; }
 }

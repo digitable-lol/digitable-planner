@@ -67,6 +67,22 @@ describe('IndexedDB repository', () => {
     await expect(database.load()).resolves.toEqual(initial)
     database.close()
   })
+
+  it('persists a valid time slot and rejects malformed timing before the transaction', async () => {
+    const database = await PlannerDatabase.open()
+    const initial = await database.load()
+    const timed: PlannerState = {
+      ...initial,
+      events: [{ id: 'timed', calendarId: initial.calendars[0].id, title: 'Slot', description: '', startDate: '2026-09-01', endDateExclusive: '2026-09-02', allDay: false, startTime: '09:30', endTime: '11:00', createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-01T00:00:00.000Z' }],
+    }
+    await database.save(timed)
+    await expect(database.load()).resolves.toEqual(timed)
+    const malformed = structuredClone(timed)
+    ;(malformed.events[0] as unknown as { allDay: string }).allDay = 'false'
+    await expect(database.save(malformed)).rejects.toThrow('Некорректный тип события')
+    await expect(database.load()).resolves.toEqual(timed)
+    database.close()
+  })
 })
 
 describe('cross-tab state invalidation', () => {

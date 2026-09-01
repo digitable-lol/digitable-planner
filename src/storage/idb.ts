@@ -1,5 +1,6 @@
-import { assertSafeCalendarColors, blankState, type PlannerCalendar, type PlannerEvent, type PlannerState } from '../domain/types'
+import { assertSafeCalendarColors, blankState, validateEventTiming, type PlannerCalendar, type PlannerEvent, type PlannerState } from '../domain/types'
 import { getCity } from '../data/cities'
+import { parseLocalDate } from '../domain/dates'
 
 const DB_NAME = 'digitable-planner'
 const DB_VERSION = 1
@@ -9,6 +10,16 @@ const EVENTS = 'events'
 function assertSafeEventCities(state: Pick<PlannerState, 'events'>): void {
   if (!state.events.every((event) => event.cityId === undefined || Boolean(getCity(event.cityId)))) {
     throw new Error('Обнаружен неизвестный город события')
+  }
+}
+
+function assertSafeEventTimes(state: Pick<PlannerState, 'events'>): void {
+  for (const event of state.events) {
+    if (typeof event.allDay !== 'boolean') throw new Error('Некорректный тип события')
+    parseLocalDate(event.startDate)
+    parseLocalDate(event.endDateExclusive)
+    if (event.endDateExclusive <= event.startDate) throw new Error('Дата окончания должна быть позже начала')
+    validateEventTiming(event)
   }
 }
 
@@ -63,12 +74,14 @@ export class PlannerDatabase {
     }
     assertSafeCalendarColors(state)
     assertSafeEventCities(state)
+    assertSafeEventTimes(state)
     return state
   }
 
   async save(state: PlannerState): Promise<void> {
     assertSafeCalendarColors(state)
     assertSafeEventCities(state)
+    assertSafeEventTimes(state)
     const transaction = this.database.transaction([CALENDARS, EVENTS], 'readwrite')
     const calendars = transaction.objectStore(CALENDARS)
     const events = transaction.objectStore(EVENTS)

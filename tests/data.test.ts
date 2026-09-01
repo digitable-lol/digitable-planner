@@ -68,6 +68,49 @@ describe('iCalendar', () => {
     expect(() => importIcs(input, 'cal-1')).toThrow()
   })
 
+  it('round-trips optional local start and end time without turning it into an all-day event', () => {
+    const timed = { ...state.events[0], allDay: false, startTime: '09:30', endTime: '11:05' } as const
+    const exported = exportIcs([timed])
+    expect(exported).toContain('DTSTART:20260910T093000')
+    expect(exported).toContain('DTEND:20260912T110500')
+    expect(exported).not.toContain('DTSTART;VALUE=DATE:20260910')
+    expect(importIcs(exported, 'cal-1')[0]).toMatchObject({
+      allDay: false,
+      startDate: '2026-09-10',
+      endDateExclusive: '2026-09-13',
+      startTime: '09:30',
+      endTime: '11:05',
+    })
+  })
+
+  it('imports a timed DTSTART without DTEND as an open-ended local slot', () => {
+    const input = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:slot\r\nDTSTART:20260910T093000\r\nSUMMARY:Slot\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    expect(importIcs(input, 'cal-1')[0]).toMatchObject({
+      allDay: false,
+      startDate: '2026-09-10',
+      endDateExclusive: '2026-09-11',
+      startTime: '09:30',
+    })
+    expect(importIcs(input, 'cal-1')[0].endTime).toBeUndefined()
+  })
+
+  it('rejects a local time slot whose ending is not after its start', () => {
+    const input = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20260910T110000\r\nDTEND:20260910T103000\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    expect(() => importIcs(input, 'cal-1')).toThrow('позже')
+  })
+
+  it('rejects timezone-bearing slots instead of silently changing their wall-clock time', () => {
+    const withTimezone = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;TZID=Europe/Moscow:20260910T093000\r\nSUMMARY:Slot\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    const asUtc = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART:20260910T063000Z\r\nSUMMARY:Slot\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    expect(() => importIcs(withTimezone, 'cal-1')).toThrow('TZID')
+    expect(() => importIcs(asUtc, 'cal-1')).toThrow('UTC')
+  })
+
+  it('accepts explicit VALUE=DATE-TIME when the value is floating local time', () => {
+    const input = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nDTSTART;VALUE=DATE-TIME:20260910T093000\r\nDTEND;VALUE=DATE-TIME:20260910T110000\r\nSUMMARY:Slot\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+    expect(importIcs(input, 'cal-1')[0]).toMatchObject({ allDay: false, startTime: '09:30', endTime: '11:00' })
+  })
+
   it('leaves an unknown external city id unbound instead of geocoding it', () => {
     const input = 'BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:unknown\r\nDTSTART;VALUE=DATE:20260901\r\nSUMMARY:Trip\r\nLOCATION:Unknown place\r\nX-DIGITABLE-CITY-ID:not-in-catalogue\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
     expect(importIcs(input, 'cal-1')[0].cityId).toBeUndefined()
@@ -108,6 +151,16 @@ describe('dplan backup', () => {
 
     expect(copiedCalendar.visible).toBe(true)
     expect(copiedEvent.calendarId).toBe(copiedCalendar.id)
+  })
+
+  it('keeps optional event time in a checked backup while accepting legacy all-day events', () => {
+    const timed: PlannerState = {
+      ...state,
+      events: state.events.map((event) => ({ ...event, allDay: false, startTime: '09:30', endTime: '11:00' })),
+    }
+    const preview = previewBackup(createBackup(timed))
+    expect(preview.envelope.payload.events[0]).toMatchObject({ allDay: false, startTime: '09:30', endTime: '11:00' })
+    expect(previewBackup(createBackup(state)).envelope.payload.events[0].allDay).toBe(true)
   })
 
   it('rejects tampering before state construction', () => {

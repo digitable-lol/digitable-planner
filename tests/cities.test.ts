@@ -4,6 +4,28 @@ import { cityEventGroups } from '../src/domain/city-map'
 import type { PlannerState } from '../src/domain/types'
 
 describe('offline city catalogue', () => {
+  it('includes a useful offline catalogue across Russian regions', () => {
+    const russianCities = plannerCities.filter(({ country }) => country === 'Россия')
+    expect(russianCities.length).toBeGreaterThanOrEqual(70)
+
+    for (const expected of [
+      { id: 'ivanovo', name: 'Иваново', timeZone: 'Europe/Moscow' },
+      { id: 'cheboksary', name: 'Чебоксары', timeZone: 'Europe/Moscow' },
+      { id: 'kaliningrad', name: 'Калининград', timeZone: 'Europe/Kaliningrad' },
+      { id: 'yakutsk', name: 'Якутск', timeZone: 'Asia/Yakutsk' },
+      { id: 'anadyr', name: 'Анадырь', timeZone: 'Asia/Anadyr' },
+    ]) {
+      expect(getCity(expected.id)).toMatchObject(expected)
+    }
+
+    for (const city of russianCities) {
+      expect(city.latitude).toBeGreaterThanOrEqual(41)
+      expect(city.latitude).toBeLessThanOrEqual(82)
+      expect(city.longitude).toBeGreaterThanOrEqual(19)
+      expect(city.longitude).toBeLessThanOrEqual(180)
+    }
+  })
+
   it('uses unique stable ids, valid coordinates, and supported time zones', () => {
     expect(new Set(plannerCities.map(({ id }) => id)).size).toBe(plannerCities.length)
     for (const city of plannerCities) {

@@ -1,5 +1,5 @@
 import { parseLocalDate } from '../domain/dates'
-import { assertSafeCalendarColors, isCalendarColor, type PlannerCalendar, type PlannerEvent, type PlannerState } from '../domain/types'
+import { assertSafeCalendarColors, isCalendarColor, validateEventTiming, type PlannerCalendar, type PlannerEvent, type PlannerState } from '../domain/types'
 import { getCity } from './cities'
 
 const MAGIC = 'DIGITABLE-PLANNER-BACKUP'
@@ -52,11 +52,12 @@ function validateEvent(value: unknown, calendarIds: Set<string>): value is Plann
   const event = value as Record<string, unknown>
   if (!['id', 'calendarId', 'title', 'description', 'startDate', 'endDateExclusive', 'createdAt', 'updatedAt']
     .every((key) => typeof event[key] === 'string')) return false
-  if (event.allDay !== true || !calendarIds.has(event.calendarId as string)) return false
+  if (typeof event.allDay !== 'boolean' || !calendarIds.has(event.calendarId as string)) return false
   if (event.cityId !== undefined && (typeof event.cityId !== 'string' || !getCity(event.cityId))) return false
   try {
     parseLocalDate(event.startDate as string)
     parseLocalDate(event.endDateExclusive as string)
+    validateEventTiming(event as unknown as PlannerEvent)
   } catch { return false }
   return (event.startDate as string) < (event.endDateExclusive as string)
 }

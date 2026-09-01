@@ -1,3 +1,4 @@
+import 'leaflet/dist/leaflet.css'
 import './styles.css'
 import { PlannerApp } from './planner-app'
 import { isEmbedPath } from './embed'

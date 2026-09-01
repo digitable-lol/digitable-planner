@@ -6,10 +6,15 @@ provider connection.
 
 ## Current milestone
 
-- classic 12-month desktop view, continuous flow view, and an offline city map;
+- classic 12-month desktop view, compact continuous flow view, and an interactive offline city map;
+- whole-year, future-only, quarterly and explicit month-set scopes;
 - banners and heatmap, editable local calendar names/colours, event CRUD and recurrence;
-- city selection from a bundled list, chronological map markers, and no tile or
-  geolocation requests;
+- optional local start/end time with all-day compatibility and chronological agendas;
+- 106 bundled cities (74 in Russia), Leaflet controls over bundled Natural Earth
+  boundaries, chronological markers, and no tile, geocoder or geolocation requests;
+- standalone system/light/dark themes plus the inherited Courses embed theme;
+- all visible events in the right panel when no day is selected and period statistics
+  below the calendar list;
 - IndexedDB persistence with live same-origin tab refresh, `.ics` import/export
   and checked `.dplan` backups;
 - compact data/connections modal with a confirmed local-calendar reset;

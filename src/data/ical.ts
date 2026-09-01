@@ -1,5 +1,5 @@
 import { addDays, formatLocalDate, parseLocalDate } from '../domain/dates'
-import type { LocalDate, PlannerEvent } from '../domain/types'
+import { parseLocalTime, validateEventTiming, type LocalDate, type LocalTime, type PlannerEvent } from '../domain/types'
 import { getCity } from './cities'
 
 const MAX_ICS_BYTES = 2_000_000
@@ -17,11 +17,21 @@ function icalDate(value: LocalDate): string {
   return value.replaceAll('-', '')
 }
 
+function icalTime(value: LocalTime): string {
+  return `${value.replace(':', '')}00`
+}
+
 function localFromIcal(value: string): LocalDate {
   if (!/^\d{8}$/.test(value)) throw new Error(`Неподдерживаемая дата: ${value}`)
   const date = `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}` as LocalDate
   parseLocalDate(date)
   return date
+}
+
+function localDateTimeFromIcal(value: string): { date: LocalDate; time: LocalTime } {
+  const match = /^(\d{8})T(\d{2})(\d{2})(?:\d{2})?$/.exec(value)
+  if (!match) throw new Error(`Неподдерживаемые локальные дата и время: ${value}`)
+  return { date: localFromIcal(match[1]), time: parseLocalTime(`${match[2]}:${match[3]}`) }
 }
 
 function fold(line: string): string {
@@ -51,9 +61,17 @@ export function exportIcs(events: PlannerEvent[], calendarName = 'Digitable Plan
     `X-WR-CALNAME:${escapeText(calendarName)}`,
   ]
   for (const event of [...events].sort((a, b) => a.startDate.localeCompare(b.startDate) || a.id.localeCompare(b.id))) {
+    validateEventTiming(event)
     lines.push('BEGIN:VEVENT', `UID:${escapeText(event.id)}@planner.digitable.life`)
     lines.push(`DTSTAMP:${event.updatedAt.replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`)
-    lines.push(`DTSTART;VALUE=DATE:${icalDate(event.startDate)}`, `DTEND;VALUE=DATE:${icalDate(event.endDateExclusive)}`)
+    if (event.allDay) {
+      lines.push(`DTSTART;VALUE=DATE:${icalDate(event.startDate)}`, `DTEND;VALUE=DATE:${icalDate(event.endDateExclusive)}`)
+    } else {
+      lines.push(`DTSTART:${icalDate(event.startDate)}T${icalTime(event.startTime!)}`)
+      if (event.endTime) {
+        lines.push(`DTEND:${icalDate(addDays(event.endDateExclusive, -1))}T${icalTime(event.endTime)}`)
+      }
+    }
     lines.push(`SUMMARY:${escapeText(event.title)}`)
     if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`)
     const city = getCity(event.cityId)
@@ -63,7 +81,9 @@ export function exportIcs(events: PlannerEvent[], calendarName = 'Digitable Plan
     }
     if (event.recurrence) {
       const rule = [`FREQ=${event.recurrence.frequency.toUpperCase()}`, `INTERVAL=${event.recurrence.interval}`]
-      if (event.recurrence.until) rule.push(`UNTIL=${icalDate(event.recurrence.until)}`)
+      if (event.recurrence.until) {
+        rule.push(`UNTIL=${icalDate(event.recurrence.until)}${event.allDay ? '' : `T${icalTime(event.startTime!)}`}`)
+      }
       lines.push(`RRULE:${rule.join(';')}`)
     }
     lines.push('END:VEVENT')
@@ -84,11 +104,29 @@ export function importIcs(input: string, calendarId: string, now = new Date()): 
     if (line === 'BEGIN:VEVENT') { current = {}; continue }
     if (line === 'END:VEVENT') {
       if (!current) throw new Error('Некорректная структура VEVENT')
+      if (current['UNSUPPORTED-DATETIME-PARAMS']) throw new Error('TZID и UTC-время пока не поддерживаются: импортируйте floating local или событие на весь день')
       const startRaw = current.DTSTART
       if (!startRaw) throw new Error('VEVENT без DTSTART')
-      const startDate = localFromIcal(startRaw)
-      const endDateExclusive = current.DTEND ? localFromIcal(current.DTEND) : addDays(startDate, 1)
-      if (endDateExclusive <= startDate) throw new Error('DTEND должен быть позже DTSTART')
+      if (startRaw.endsWith('Z') || current.DTEND?.endsWith('Z')) {
+        throw new Error('UTC-время пока не поддерживается: импортируйте floating local или событие на весь день')
+      }
+      const allDay = /^\d{8}$/.test(startRaw)
+      const start = allDay ? { date: localFromIcal(startRaw), time: undefined } : localDateTimeFromIcal(startRaw)
+      let endDateExclusive: LocalDate
+      let endTime: LocalTime | undefined
+      if (current.DTEND) {
+        if (allDay) {
+          if (!/^\d{8}$/.test(current.DTEND)) throw new Error('DTSTART и DTEND должны иметь одинаковый тип')
+          endDateExclusive = localFromIcal(current.DTEND)
+        } else {
+          const end = localDateTimeFromIcal(current.DTEND)
+          endDateExclusive = addDays(end.date, 1)
+          endTime = end.time
+        }
+      } else {
+        endDateExclusive = addDays(start.date, 1)
+      }
+      if (endDateExclusive <= start.date) throw new Error('DTEND должен быть позже DTSTART')
       const id = (current.UID?.split('@')[0] || crypto.randomUUID()).slice(0, 160)
       const recurrence = parseRecurrence(current.RRULE)
       const city = getCity(current['X-DIGITABLE-CITY-ID'])
@@ -97,14 +135,16 @@ export function importIcs(input: string, calendarId: string, now = new Date()): 
         calendarId,
         title: unescapeText(current.SUMMARY || 'Без названия').slice(0, 300),
         description: unescapeText(current.DESCRIPTION || '').slice(0, 10_000),
-        startDate,
+        startDate: start.date,
         endDateExclusive,
-        allDay: true,
+        allDay,
+        ...(!allDay ? { startTime: start.time, ...(endTime ? { endTime } : {}) } : {}),
         ...(recurrence ? { recurrence } : {}),
         ...(city ? { cityId: city.id } : {}),
         createdAt: now.toISOString(),
         updatedAt: now.toISOString(),
       })
+      validateEventTiming(events.at(-1)!)
       if (events.length > MAX_EVENTS) throw new Error('ICS содержит больше 5000 событий')
       current = undefined
       continue
@@ -112,7 +152,12 @@ export function importIcs(input: string, calendarId: string, now = new Date()): 
     if (current) {
       const separator = line.indexOf(':')
       if (separator < 1) continue
-      const key = line.slice(0, separator).split(';')[0]
+      const property = line.slice(0, separator)
+      const [key, ...parameters] = property.split(';')
+      const supportedDateTimeParameters = new Set(['VALUE=DATE', 'VALUE=DATE-TIME'])
+      if ((key === 'DTSTART' || key === 'DTEND') && parameters.some((parameter) => !supportedDateTimeParameters.has(parameter))) {
+        current['UNSUPPORTED-DATETIME-PARAMS'] = property
+      }
       if (['UID', 'DTSTART', 'DTEND', 'SUMMARY', 'DESCRIPTION', 'LOCATION', 'RRULE', 'X-DIGITABLE-CITY-ID'].includes(key)) current[key] = line.slice(separator + 1)
     }
   }

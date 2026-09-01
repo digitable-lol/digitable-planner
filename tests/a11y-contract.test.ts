@@ -66,10 +66,11 @@ describe('accessibility contract', () => {
 
   it('keeps map markers keyboard-operable with a textual event fallback', () => {
     expect(source).toContain("['map', 'Карта']")
-    expect(source).toContain("marker.type = 'button'")
+    expect(source).toContain('L.marker([')
+    expect(source).toContain('keyboard: true')
     expect(source).toContain("setAttribute('aria-label', `Карта событий")
     expect(source).toContain("el('div', 'city-timeline')")
-    expect(css).toContain('.city-marker:focus-visible')
+    expect(css).toContain('.leaflet-city-icon.is-active')
   })
 
   it('keeps data actions in a labelled modal and guards local reset', () => {
@@ -77,7 +78,10 @@ describe('accessibility contract', () => {
     expect(source).toContain("settings-dialog-title")
     expect(source).toContain('settings.showModal()')
     expect(source).toContain("'Сбросить календарь'")
-    expect(source).toContain("if (!confirm('Удалить все локальные календари и события?")
+    expect(source).toContain("this.confirmAction('Сбросить календарь?'")
+    expect(source).toContain("el('dialog', 'dialog confirmation-dialog')")
+    expect(source).toContain("dialog.returnValue = ''")
+    expect(source).not.toMatch(/\b(?:alert|confirm)\(/)
     expect(source).toContain('this.commit(blankState())')
     expect(css).toContain('.settings-dialog')
   })
@@ -93,13 +97,14 @@ describe('accessibility contract', () => {
     expect(source).toContain("this.textButton('Удалить'")
     expect(source).toContain('deleteCalendar(this.state, existing.id)')
     expect(source).toContain('remove.disabled = this.state.calendars.length === 1')
+    expect(source).toContain("name.input.addEventListener('input', () => name.input.setCustomValidity(''))")
   })
 
   it('renders the Courses route as a compact microfrontend without duplicate chrome', () => {
     expect(main).toContain("document.documentElement.dataset.embed = embedded ? 'true' : 'false'")
     expect(source).toContain('if (!this.embedded && !this.cleanView) shell.append(this.renderHeader())')
     expect(source).toContain("this.textButton('Данные', () => this.openSettingsDialog())")
-    expect(source).toContain("else modes.append(this.textButton('На весь экран'")
+    expect(source).toContain("modes.append(this.textButton('На весь экран'")
     expect(css).toContain('html[data-embed="true"] .workspace--year')
     expect(css).toContain('@media (min-width: 1020px) and (max-width: 1180px)')
     expect(css).toContain('grid-template-columns: 152px minmax(0, 1fr) 156px')
@@ -109,5 +114,20 @@ describe('accessibility contract', () => {
     expect(css).toContain('grid-template-rows: repeat(4, clamp(210px, 23vw, 250px))')
     expect(css).toContain('.workspace--clean .calendars-panel')
     expect(css).toContain('html[data-embed="true"] .workspace--clean .planner-layout')
+  })
+
+  it('offers standalone themes, flexible periods, all-events context and optional time', () => {
+    expect(source).toContain("['system', 'Тема: системная']")
+    expect(source).toContain("localStorage.setItem(THEME_KEY, theme)")
+    expect(source).toContain("['future', 'Только будущее']")
+    expect(source).toContain("['q1', 'I квартал']")
+    expect(source).toContain("['custom', 'Выбрать месяцы…']")
+    expect(source).toContain("el('h2', '', 'Все мероприятия')")
+    expect(source).toContain("setAttribute('aria-label', 'Статистика выбранного периода')")
+    expect(source).toContain("'Указать время события'")
+    expect(source).toContain("parseLocalTime(startTimeInput.input.value)")
+    expect(css).toContain('.months--year.months--filtered')
+    expect(css).toContain('.months--flow .day.is-weekend')
+    expect(main.indexOf("leaflet/dist/leaflet.css")).toBeLessThan(main.indexOf("./styles.css"))
   })
 })

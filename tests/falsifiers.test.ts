@@ -13,7 +13,7 @@ describe('first-slice falsifiers', () => {
   })
 
   it('runtime cache is an explicit shell allowlist, excluding user and provider data', () => {
-    expect(serviceWorker).toContain("'digitable-planner-shell-v7'")
+    expect(serviceWorker).toContain("'digitable-planner-shell-v8'")
     expect(serviceWorker).toContain("request.mode === 'navigate'")
     expect(serviceWorker).toContain("fetch(request).then")
     expect(serviceWorker).toContain("caches.match('/index.html')")
@@ -27,9 +27,11 @@ describe('first-slice falsifiers', () => {
     }
   })
 
-  it('keeps the first map slice local and free of tile, geolocation, and calendar payload channels', () => {
+  it('keeps the map local and free of tile, geolocation, and calendar payload channels', () => {
     const mapSources = `${citySource}\n${plannerSource}`
-    expect(mapSources).not.toMatch(/mapbox|openstreetmap|googleapis|leaflet/i)
+    expect(mapSources).not.toMatch(/mapbox|openstreetmap|googleapis|tileLayer|fetch\(/i)
+    expect(mapSources).toContain("from 'leaflet'")
+    expect(mapSources).toContain("world-atlas/countries-110m.json")
     expect(mapSources).not.toContain('geolocation')
     expect(citySource).not.toContain('https://')
     expect(citySource).not.toContain('fetch(')
